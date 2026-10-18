@@ -1,31 +1,37 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export type TargetCustomer = {
+export type CustomerInteraction = {
   id?: string;
-  name: string;
-  phone_number: string;
-  reason_to_choose: string;
+  content: string;
+  created_at?: string;
+};
+
+export type Customer = {
+  id: string;
+  clerk_id: string;
+  company_name: string;
+  contact_person: string;
   address: string;
+  phone_number: string;
   website: string;
   facebook: string;
-  summary_about_the_target_customer: string;
-  target_customer_list_id?: string;
-  created_at?: string;
+  zalo: string;
+  notes: string;
+  interaction_history: CustomerInteraction[];
+  created_at: string;
+  updated_at: string;
 };
 
-export type TargetCustomerList = {
-  id: string;
-  name: string;
-  description: string;
-  clerk_id: string;
-  created_at?: string;
-};
-
-export type SearchTargetCustomersResponse = {
-  search_id: string;
-  list: TargetCustomerList | null;
-  customers: TargetCustomer[];
-  saved: boolean;
+export type CustomerInput = {
+  company_name: string;
+  contact_person: string;
+  address: string;
+  phone_number: string;
+  website: string;
+  facebook: string;
+  zalo: string;
+  notes: string;
+  interaction_history?: CustomerInteraction[];
 };
 
 async function apiJson<T>(
@@ -56,64 +62,59 @@ async function apiJson<T>(
   return (await response.json()) as T;
 }
 
-export async function fetchTargetCustomerLists(
+export async function sendChatMessage(
+  prompt: string,
   token: string,
-): Promise<TargetCustomerList[]> {
-  return apiJson<TargetCustomerList[]>(
-    "/api/target-customers/lists",
-    token,
-  );
+  threadId: string,
+): Promise<string> {
+  const payload = await apiJson<{ response: string }>("/api/chat/", token, {
+    method: "POST",
+    body: JSON.stringify({ prompt, thread_id: threadId }),
+    signal: AbortSignal.timeout(300_000),
+  });
+  const reply = payload.response;
+  return typeof reply === "string" ? reply : JSON.stringify(reply);
 }
 
-export async function createTargetCustomerList(
+export async function listCustomers(token: string): Promise<Customer[]> {
+  return apiJson<Customer[]>("/api/customers/", token);
+}
+
+export async function getCustomer(
   token: string,
-  name: string,
-  description = "",
-): Promise<TargetCustomerList> {
-  return apiJson<TargetCustomerList>("/api/target-customers/lists", token, {
+  customerId: string,
+): Promise<Customer> {
+  return apiJson<Customer>(`/api/customers/${customerId}`, token);
+}
+
+export async function createCustomer(
+  token: string,
+  payload: CustomerInput,
+): Promise<Customer> {
+  return apiJson<Customer>("/api/customers/", token, {
     method: "POST",
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify(payload),
   });
 }
 
-export async function searchTargetCustomers(
-  query: string,
+export async function updateCustomer(
   token: string,
-  targetCustomerListId: string,
-): Promise<SearchTargetCustomersResponse> {
-  return apiJson<SearchTargetCustomersResponse>(
-    "/api/target-customers/search-target-customers",
-    token,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        query,
-        target_customer_list_id: targetCustomerListId,
-      }),
-      signal: AbortSignal.timeout(180_000),
-    },
-  );
+  customerId: string,
+  payload: Partial<CustomerInput>,
+): Promise<Customer> {
+  return apiJson<Customer>(`/api/customers/${customerId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
-export async function removeFoundTargetCustomer(
+export async function deleteCustomer(
   token: string,
-  searchId: string,
   customerId: string,
-): Promise<SearchTargetCustomersResponse> {
-  return apiJson<SearchTargetCustomersResponse>(
-    `/api/target-customers/search-sessions/${searchId}/customers/${customerId}`,
+): Promise<{ deleted: boolean; customer: Customer }> {
+  return apiJson<{ deleted: boolean; customer: Customer }>(
+    `/api/customers/${customerId}`,
     token,
     { method: "DELETE" },
-  );
-}
-
-export async function confirmTargetCustomers(
-  token: string,
-  searchId: string,
-): Promise<SearchTargetCustomersResponse> {
-  return apiJson<SearchTargetCustomersResponse>(
-    `/api/target-customers/search-sessions/${searchId}/confirm`,
-    token,
-    { method: "POST" },
   );
 }

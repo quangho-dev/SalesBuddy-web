@@ -1,7 +1,13 @@
-export default function ChatPage() {
-  return (
-    <main className="flex flex-1 items-center justify-center p-8">
-      <p>You are signed in.</p>
-    </main>
-  );
+import { ChatPanel } from "@/components/ChatPanel";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+
+export default async function ChatPage() {
+  const { userId } = await auth();
+
+  if (!userId) {
+    redirect("/sign-in");
+  }
+
+  return <ChatPanel />;
 }

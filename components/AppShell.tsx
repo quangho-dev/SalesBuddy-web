@@ -3,7 +3,7 @@
 import { Show, SignInButton, SignUpButton } from "@clerk/nextjs";
 import { AppSidebar } from "@/components/AppSidebar";
 import { usePathname } from "next/navigation";
-import { Suspense, useState } from "react";
+import { useState } from "react";
 
 function SignedInShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -11,9 +11,7 @@ function SignedInShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full min-h-0 flex-1">
       <div className="hidden h-full md:block">
-        <Suspense fallback={<SidebarFallback />}>
-          <AppSidebar />
-        </Suspense>
+        <AppSidebar />
       </div>
 
       {mobileOpen ? (
@@ -25,14 +23,12 @@ function SignedInShell({ children }: { children: React.ReactNode }) {
             onClick={() => setMobileOpen(false)}
           />
           <div className="relative z-50 h-full">
-            <Suspense fallback={<SidebarFallback />}>
-              <AppSidebar onNavigate={() => setMobileOpen(false)} />
-            </Suspense>
+            <AppSidebar onNavigate={() => setMobileOpen(false)} />
           </div>
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex items-center gap-3 border-b border-black/10 px-4 py-3 md:hidden dark:border-white/10">
           <button
             type="button"
@@ -46,12 +42,6 @@ function SignedInShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
     </div>
-  );
-}
-
-function SidebarFallback() {
-  return (
-    <aside className="h-full w-64 border-r border-black/10 dark:border-white/10" />
   );
 }
 
