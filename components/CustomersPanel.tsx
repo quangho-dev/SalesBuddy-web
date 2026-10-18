@@ -1,11 +1,13 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createCustomer,
   deleteCustomer,
+  downloadCustomerTemplate,
   getCustomer,
+  importCustomers,
   listCustomers,
   updateCustomer,
   type Customer,
@@ -66,6 +68,8 @@ export function CustomersPanel() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selected = customers.find((customer) => customer.id === selectedId) ?? null;
 
@@ -257,6 +261,41 @@ export function CustomersPanel() {
     }
   }
 
+  async function onDownloadTemplate() {
+    setError(null);
+    try {
+      const token = await withToken();
+      await downloadCustomerTemplate(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không tải được file mẫu.");
+    }
+  }
+
+  async function onImportFile(file: File) {
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      setError("Chỉ hỗ trợ file .xlsx");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const token = await withToken();
+      const result = await importCustomers(token, file);
+      setCustomers((current) => [...result.customers, ...current]);
+      setNotice(
+        `Đã import ${result.imported} khách hàng` +
+          (result.skipped ? `, bỏ qua ${result.skipped} dòng trống` : "") +
+          ".",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không import được file Excel.");
+    } finally {
+      setSaving(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   const showEditor = creating || selectedId !== null;
   const title = creating
     ? "Khách hàng mới"
@@ -273,18 +312,51 @@ export function CustomersPanel() {
             Thêm, sửa, xóa và xem lịch sử tương tác.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="h-10 shrink-0 rounded-lg bg-black px-4 text-sm font-medium text-white dark:bg-white dark:text-black"
-        >
-          Thêm khách hàng
-        </button>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void onImportFile(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => void onDownloadTemplate()}
+            disabled={saving}
+            className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
+          >
+            Tải mẫu Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={saving}
+            className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
+          >
+            {saving ? "Đang xử lý..." : "Import Excel"}
+          </button>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white dark:bg-white dark:text-black"
+          >
+            Thêm khách hàng
+          </button>
+        </div>
       </header>
 
       {error && !showEditor ? (
         <p className="border-b border-red-300 bg-red-50 px-6 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           {error}
+        </p>
+      ) : null}
+      {notice ? (
+        <p className="border-b border-emerald-300 bg-emerald-50 px-6 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+          {notice}
         </p>
       ) : null}
 

@@ -47,6 +47,13 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
         >
           Khách hàng
         </Link>
+        <Link
+          href="/products"
+          onClick={onNavigate}
+          className={navItemClass(pathname.startsWith("/products"))}
+        >
+          Sản phẩm
+        </Link>
       </nav>
 
       <div className="border-t border-black/10 px-4 py-3 dark:border-white/10">
