@@ -59,6 +59,93 @@ export type CustomerImportResult = {
   customers: Customer[];
 };
 
+export type OrderCustomer = {
+  id: string;
+  company_name: string;
+  contact_person: string;
+  phone_number: string;
+};
+
+export type OrderItem = {
+  id: string;
+  product_name: string;
+  unit: string;
+  quantity: number | string;
+  selling_price: number | string;
+  vat_invoice: boolean;
+  notes: string;
+};
+
+export type Order = {
+  id: string;
+  clerk_id: string;
+  customer_id: string;
+  order_date: string;
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  customers?: OrderCustomer | null;
+  items: OrderItem[];
+};
+
+export type OrderItemInput = {
+  product_name: string;
+  unit: string;
+  quantity: number;
+  selling_price: number;
+  vat_invoice: boolean;
+  notes: string;
+};
+
+export type OrderInput = {
+  customer_id: string;
+  order_date?: string | null;
+  notes: string;
+  items: OrderItemInput[];
+};
+
+export type QuoteItem = {
+  id: string;
+  product_name: string;
+  unit: string;
+  quantity: number | string;
+  selling_price: number | string;
+  vat_invoice: boolean;
+  notes: string;
+};
+
+export type Quote = {
+  id: string;
+  clerk_id: string;
+  customer_id: string;
+  notes: string;
+  subtotal: number | string;
+  vat_total: number | string;
+  grand_total: number | string;
+  drive_file_id?: string;
+  drive_file_name?: string;
+  drive_web_link?: string;
+  created_at: string;
+  updated_at: string;
+  customers?: OrderCustomer | null;
+  items: QuoteItem[];
+};
+
+export type QuoteItemInput = {
+  product_name: string;
+  unit: string;
+  quantity: number;
+  selling_price: number;
+  vat_invoice: boolean;
+  notes: string;
+};
+
+export type QuoteInput = {
+  customer_id: string;
+  notes: string;
+  items: QuoteItemInput[];
+};
+
 export type CustomerInput = {
   company_name: string;
   contact_person: string;
@@ -281,4 +368,135 @@ export async function downloadProductTemplate(token: string): Promise<void> {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function listOrders(
+  token: string,
+  customerId?: string,
+): Promise<Order[]> {
+  const query = customerId
+    ? `?customer_id=${encodeURIComponent(customerId)}`
+    : "";
+  return apiJson<Order[]>(`/api/orders/${query}`, token);
+}
+
+export async function getOrder(token: string, orderId: string): Promise<Order> {
+  return apiJson<Order>(`/api/orders/${orderId}`, token);
+}
+
+export async function createOrder(
+  token: string,
+  payload: OrderInput,
+): Promise<Order> {
+  return apiJson<Order>("/api/orders/", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateOrder(
+  token: string,
+  orderId: string,
+  payload: Partial<OrderInput>,
+): Promise<Order> {
+  return apiJson<Order>(`/api/orders/${orderId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteOrder(
+  token: string,
+  orderId: string,
+): Promise<{ deleted: boolean; order: Order }> {
+  return apiJson<{ deleted: boolean; order: Order }>(
+    `/api/orders/${orderId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export async function listQuotes(
+  token: string,
+  customerId?: string,
+): Promise<Quote[]> {
+  const query = customerId
+    ? `?customer_id=${encodeURIComponent(customerId)}`
+    : "";
+  return apiJson<Quote[]>(`/api/quotes/${query}`, token);
+}
+
+export async function getQuote(token: string, quoteId: string): Promise<Quote> {
+  return apiJson<Quote>(`/api/quotes/${quoteId}`, token);
+}
+
+export async function createQuote(
+  token: string,
+  payload: QuoteInput,
+): Promise<Quote> {
+  return apiJson<Quote>("/api/quotes/", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateQuote(
+  token: string,
+  quoteId: string,
+  payload: Partial<QuoteInput>,
+): Promise<Quote> {
+  return apiJson<Quote>(`/api/quotes/${quoteId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteQuote(
+  token: string,
+  quoteId: string,
+): Promise<{ deleted: boolean; quote: Quote }> {
+  return apiJson<{ deleted: boolean; quote: Quote }>(
+    `/api/quotes/${quoteId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export type QuoteFileCustomerInput = {
+  company_name?: string;
+  contact_person?: string;
+  address?: string;
+  phone_number?: string;
+  tax_code?: string;
+  email?: string;
+};
+
+export type GenerateQuoteFileInput = {
+  quote_id?: string;
+  customer?: QuoteFileCustomerInput;
+  notes?: string;
+  items?: QuoteItemInput[];
+  quote_number?: string;
+  quote_date?: string;
+};
+
+export type GeneratedQuoteFile = {
+  file_id: string;
+  file_name: string;
+  web_link: string;
+  sheet_name: string;
+  summary: string;
+  template_name: string;
+  quote: Record<string, unknown>;
+};
+
+export async function generateQuoteFile(
+  token: string,
+  payload: GenerateQuoteFileInput,
+): Promise<GeneratedQuoteFile> {
+  return apiJson<GeneratedQuoteFile>("/api/quotes/generate-file", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(300_000),
+  });
 }
