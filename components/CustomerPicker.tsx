@@ -11,6 +11,7 @@ const EMPTY_NEW = {
   company_name: "",
   phone_number: "",
   contact_person: "",
+  tax_code: "",
 };
 
 export function customerLabel(
@@ -137,6 +138,7 @@ export function CustomerPicker({
         company_name,
         phone_number,
         contact_person,
+        tax_code: newCustomer.tax_code.trim(),
         address: "",
         website: "",
         facebook: "",
@@ -247,6 +249,20 @@ export function CustomerPicker({
                   setNewCustomer((current) => ({
                     ...current,
                     contact_person: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                disabled={saving}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+              Mã số thuế
+              <input
+                value={newCustomer.tax_code}
+                onChange={(event) =>
+                  setNewCustomer((current) => ({
+                    ...current,
+                    tax_code: event.target.value,
                   }))
                 }
                 className={inputClass}

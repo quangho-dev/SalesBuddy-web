@@ -3,16 +3,19 @@
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "react-toastify";
 import { CustomerPicker, customerLabel } from "@/components/CustomerPicker";
 import {
   createOrder,
   deleteOrder,
+  generateOrderFile,
   getOrder,
   listCustomers,
   listOrders,
   listProducts,
   updateOrder,
   type Customer,
+  type GeneratedOrderFile,
   type Order,
   type OrderInput,
   type Product,
@@ -33,6 +36,7 @@ type FormState = {
   customer_id: string;
   order_date: string;
   notes: string;
+  is_paid: boolean;
   items: ItemForm[];
 };
 
@@ -83,8 +87,13 @@ function emptyForm(customerId = ""): FormState {
     customer_id: customerId,
     order_date: todayIso(),
     notes: "",
+    is_paid: false,
     items: [newItem()],
   };
+}
+
+function orderDriveLink(order?: Order | null) {
+  return order?.drive_web_link?.trim() || "";
 }
 
 function orderCustomer(order: Order, customers: Customer[]) {
@@ -123,6 +132,7 @@ function fromOrder(order: Order, products: Product[] = []): FormState {
     customer_id: order.customer_id ?? "",
     order_date: (order.order_date ?? todayIso()).slice(0, 10),
     notes: order.notes ?? "",
+    is_paid: Boolean(order.is_paid),
     items:
       order.items?.length > 0
         ? order.items.map((item) =>
@@ -160,6 +170,7 @@ function toPayload(form: FormState): OrderInput {
     customer_id: form.customer_id,
     order_date: form.order_date || null,
     notes: form.notes,
+    is_paid: Boolean(form.is_paid),
     items,
   };
 }
@@ -292,8 +303,9 @@ function ProductSearch({
   );
 }
 
-export function OrdersPanel() {
+export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}) {
   const { getToken } = useAuth();
+  const openedInitialId = useRef<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -306,8 +318,9 @@ export function OrdersPanel() {
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generatedFile, setGeneratedFile] = useState<GeneratedOrderFile | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
 
@@ -324,6 +337,7 @@ export function OrdersPanel() {
         customerLabel(customer),
         customer?.phone_number ?? "",
         order.notes,
+        order.is_paid ? "đã thanh toán" : "chưa thanh toán",
         formatDate(order.order_date),
         order.order_date,
         ...(order.items ?? []).map((item) => item.product_name),
@@ -368,7 +382,6 @@ export function OrdersPanel() {
 
   const loadList = useCallback(async () => {
     setLoadingList(true);
-    setError(null);
     try {
       const token = await withToken();
       const [orderRows, customerRows, productRows] = await Promise.all([
@@ -380,7 +393,9 @@ export function OrdersPanel() {
       setCustomers(customerRows);
       setProducts(productRows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không tải được danh sách đơn hàng.");
+      toast.error(
+        err instanceof Error ? err.message : "Không tải được danh sách đơn hàng.",
+      );
     } finally {
       setLoadingList(false);
     }
@@ -409,7 +424,7 @@ export function OrdersPanel() {
     setForm(emptyForm(customerFilter));
     setCatalogQuery("");
     setConfirmDelete(false);
-    setError(null);
+    setGeneratedFile(null);
   }
 
   async function openOrder(orderId: string) {
@@ -417,7 +432,7 @@ export function OrdersPanel() {
     setSelectedId(orderId);
     setCatalogQuery("");
     setConfirmDelete(false);
-    setError(null);
+    setGeneratedFile(null);
     const listed = orders.find((order) => order.id === orderId);
     if (listed) setForm(fromOrder(listed, products));
 
@@ -429,9 +444,19 @@ export function OrdersPanel() {
       );
       setForm(fromOrder(detail, products));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không tải được chi tiết đơn hàng.");
+      toast.error(
+        err instanceof Error ? err.message : "Không tải được chi tiết đơn hàng.",
+      );
     }
   }
+
+  useEffect(() => {
+    if (!initialOrderId || loadingList) return;
+    if (openedInitialId.current === initialOrderId) return;
+    if (!orders.some((order) => order.id === initialOrderId)) return;
+    openedInitialId.current = initialOrderId;
+    void openOrder(initialOrderId);
+  }, [initialOrderId, loadingList, orders]);
 
   function updateField<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -494,16 +519,16 @@ export function OrdersPanel() {
     event.preventDefault();
     const payload = toPayload(form);
     if (!payload.customer_id) {
-      setError("Hãy chọn khách hàng.");
+      toast.error("Hãy chọn khách hàng.");
       return;
     }
     if (payload.items.length === 0) {
-      setError("Đơn hàng cần ít nhất một sản phẩm.");
+      toast.error("Đơn hàng cần ít nhất một sản phẩm.");
       return;
     }
 
     setSaving(true);
-    setError(null);
+    const wasCreating = creating;
     try {
       const token = await withToken();
       if (creating) {
@@ -520,17 +545,95 @@ export function OrdersPanel() {
         setForm(fromOrder(updated, products));
       }
       setConfirmDelete(false);
+      toast.success(
+        wasCreating
+          ? "Đã tạo đơn hàng thành công."
+          : "Đã lưu thay đổi đơn hàng thành công.",
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không lưu được đơn hàng.");
+      toast.error(
+        err instanceof Error
+          ? `Lưu đơn hàng thất bại. ${err.message}`
+          : "Lưu đơn hàng thất bại.",
+      );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onGenerateFile() {
+    const payload = toPayload(form);
+    if (!payload.customer_id) {
+      toast.error("Hãy chọn khách hàng trước khi tạo file.");
+      return;
+    }
+    if (payload.items.length === 0) {
+      toast.error("Đơn hàng cần ít nhất một sản phẩm.");
+      return;
+    }
+
+    const customer = customers.find((row) => row.id === payload.customer_id);
+    setGenerating(true);
+    setGeneratedFile(null);
+    try {
+      const token = await withToken();
+      let orderId = creating ? "" : selectedId ?? "";
+      let orderDate = creating
+        ? payload.order_date || undefined
+        : orders.find((order) => order.id === selectedId)?.order_date;
+      if (creating) {
+        const created = await createOrder(token, payload);
+        setOrders((current) => [created, ...current]);
+        setCreating(false);
+        setSelectedId(created.id);
+        setForm(fromOrder(created, products));
+        orderId = created.id;
+        orderDate = created.order_date;
+        toast.success("Đã tạo đơn hàng thành công.");
+      }
+      const file = await generateOrderFile(token, {
+        order_id: orderId || undefined,
+        order_date: orderDate || payload.order_date || undefined,
+        customer: customer
+          ? {
+              company_name: customer.company_name,
+              contact_person: customer.contact_person,
+              address: customer.address,
+              phone_number: customer.phone_number,
+              tax_code: customer.tax_code,
+            }
+          : undefined,
+        notes: payload.notes,
+        items: payload.items,
+      });
+      setGeneratedFile(file);
+      if (orderId) {
+        setOrders((current) =>
+          current.map((order) =>
+            order.id === orderId
+              ? {
+                  ...order,
+                  drive_file_id: file.file_id,
+                  drive_file_name: file.file_name,
+                  drive_web_link: file.web_link,
+                }
+              : order,
+          ),
+        );
+      }
+      toast.success("Đã tạo file đơn hàng thành công.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Không tạo được file đơn hàng.",
+      );
+    } finally {
+      setGenerating(false);
     }
   }
 
   async function onDelete() {
     if (!selectedId) return;
     setSaving(true);
-    setError(null);
     try {
       const token = await withToken();
       await deleteOrder(token, selectedId);
@@ -539,8 +642,11 @@ export function OrdersPanel() {
       setCreating(false);
       setForm(emptyForm(customerFilter));
       setConfirmDelete(false);
+      toast.success("Đã xóa đơn hàng thành công.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không xóa được đơn hàng.");
+      toast.error(
+        err instanceof Error ? err.message : "Không xóa được đơn hàng.",
+      );
     } finally {
       setSaving(false);
     }
@@ -548,6 +654,8 @@ export function OrdersPanel() {
 
   const showEditor = creating || selectedId !== null;
   const selectedCustomer = selected ? orderCustomer(selected, customers) : null;
+  const busy = saving || generating;
+  const driveLink = orderDriveLink(selected) || generatedFile?.web_link || "";
   const title = creating
     ? "Đơn hàng mới"
     : selected
@@ -561,7 +669,7 @@ export function OrdersPanel() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Đơn hàng</h1>
           <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-            Tạo đơn theo khách hàng, nhiều sản phẩm, giá bán và xuất VAT.
+            Tạo đơn theo khách hàng, nhiều sản phẩm, giá bán, VAT và file Google Sheet từ mẫu don-hang.xls.
           </p>
         </div>
         <button
@@ -572,12 +680,6 @@ export function OrdersPanel() {
           Thêm đơn hàng
         </button>
       </header>
-
-      {error && !showEditor ? (
-        <p className="border-b border-red-300 bg-red-50 px-6 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-          {error}
-        </p>
-      ) : null}
 
       <div className="flex min-h-0 flex-1">
         <aside
@@ -630,38 +732,57 @@ export function OrdersPanel() {
                 const active = order.id === selectedId && !creating;
                 const customer = orderCustomer(order, customers);
                 const items = order.items ?? [];
+                const fileLink = orderDriveLink(order);
                 return (
                   <li key={order.id}>
-                    <button
-                      type="button"
-                      onClick={() => void openOrder(order.id)}
-                      className={`w-full rounded-lg px-3 py-3 text-left ${
+                    <div
+                      className={`rounded-lg ${
                         active
                           ? "bg-black text-white dark:bg-white dark:text-black"
                           : "hover:bg-black/5 dark:hover:bg-white/10"
                       }`}
                     >
-                      <p className="truncate text-sm font-bold">{customerLabel(customer)}</p>
-                      <p className="mt-0.5 truncate text-xs">
-                        <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
-                          {formatDate(order.order_date)}
-                          {items.some((item) => item.vat_invoice) ? " · VAT" : ""}
-                          {" · "}
-                          {items.length} SP
-                          {" · "}
-                        </span>
-                        <span className="font-bold">{formatPrice(summarizeOrder(items).grand)}đ</span>
-                      </p>
-                      {items[0]?.product_name ? (
-                        <p
-                          className={`mt-0.5 truncate text-xs ${
-                            active ? "opacity-80" : "text-black/55 dark:text-white/55"
+                      <button
+                        type="button"
+                        onClick={() => void openOrder(order.id)}
+                        className="w-full px-3 py-3 text-left"
+                      >
+                        <p className="truncate text-sm font-bold">{customerLabel(customer)}</p>
+                        <p className="mt-0.5 truncate text-xs">
+                          <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
+                            {formatDate(order.order_date)}
+                            {items.some((item) => item.vat_invoice) ? " · VAT" : ""}
+                            {order.is_paid ? " · Đã thanh toán" : " · Chưa thanh toán"}
+                            {" · "}
+                            {items.length} SP
+                            {" · "}
+                          </span>
+                          <span className="font-bold">{formatPrice(summarizeOrder(items).grand)}đ</span>
+                        </p>
+                        {items[0]?.product_name ? (
+                          <p
+                            className={`mt-0.5 truncate text-xs ${
+                              active ? "opacity-80" : "text-black/55 dark:text-white/55"
+                            }`}
+                          >
+                            {items.map((item) => item.product_name).filter(Boolean).join(", ")}
+                          </p>
+                        ) : null}
+                      </button>
+                      {fileLink ? (
+                        <a
+                          href={fileLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(event) => event.stopPropagation()}
+                          className={`mx-3 mb-3 inline-flex text-xs font-medium underline ${
+                            active ? "opacity-90" : "text-black/70 dark:text-white/70"
                           }`}
                         >
-                          {items.map((item) => item.product_name).filter(Boolean).join(", ")}
-                        </p>
+                          Xem file Drive
+                        </a>
                       ) : null}
-                    </button>
+                    </div>
                   </li>
                 );
               })
@@ -695,43 +816,80 @@ export function OrdersPanel() {
                   </button>
                   <h2 className="text-base font-semibold tracking-tight">{title}</h2>
                 </div>
-                {!creating && selectedId ? (
-                  confirmDelete ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-red-700 dark:text-red-300">Xóa đơn này?</span>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {driveLink ? (
+                    <a
+                      href={driveLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-black/15 px-3 py-1.5 text-sm dark:border-white/20"
+                    >
+                      Xem file Drive
+                    </a>
+                  ) : null}
+                  {!creating && selectedId ? (
+                    confirmDelete ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-red-700 dark:text-red-300">Xóa đơn này?</span>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          className="rounded-md border border-black/15 px-3 py-1.5 text-sm dark:border-white/20"
+                          disabled={busy}
+                        >
+                          Hủy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void onDelete()}
+                          className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                          disabled={busy}
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         type="button"
-                        onClick={() => setConfirmDelete(false)}
-                        className="rounded-md border border-black/15 px-3 py-1.5 text-sm dark:border-white/20"
-                        disabled={saving}
-                      >
-                        Hủy
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void onDelete()}
-                        className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-                        disabled={saving}
+                        onClick={() => setConfirmDelete(true)}
+                        className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 dark:border-red-800 dark:text-red-300"
                       >
                         Xóa
                       </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDelete(true)}
-                      className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 dark:border-red-800 dark:text-red-300"
-                    >
-                      Xóa
-                    </button>
-                  )
-                ) : null}
+                    )
+                  ) : null}
+                </div>
               </div>
 
-              {error ? (
-                <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-                  {error}
+              {generating ? (
+                <p className="rounded-lg border border-black/15 px-3 py-2 text-sm text-black/70 dark:border-white/20 dark:text-white/70">
+                  Đang copy mẫu don-hang.xls và điền dữ liệu. Việc này có thể mất khoảng một phút.
                 </p>
+              ) : null}
+
+              {generatedFile ? (
+                <div className="rounded-lg border border-black/15 bg-black/[0.03] px-3 py-3 text-sm dark:border-white/20 dark:bg-white/[0.04]">
+                  <p className="font-medium">Đã tạo file từ mẫu don-hang.xls</p>
+                  <p className="mt-1 truncate text-black/70 dark:text-white/70">
+                    {generatedFile.file_name}
+                    {generatedFile.sheet_name
+                      ? ` · sheet ${generatedFile.sheet_name}`
+                      : ""}
+                  </p>
+                  {generatedFile.summary ? (
+                    <p className="mt-1 text-black/60 dark:text-white/60">
+                      {generatedFile.summary}
+                    </p>
+                  ) : null}
+                  <a
+                    href={generatedFile.web_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex h-9 items-center rounded-md bg-black px-3 text-sm font-medium text-white dark:bg-white dark:text-black"
+                  >
+                    Mở Google Sheet
+                  </a>
+                </div>
               ) : null}
 
               {customers.length === 0 ? (
@@ -748,7 +906,7 @@ export function OrdersPanel() {
                 <CustomerPicker
                   customers={customers}
                   selectedId={form.customer_id}
-                  disabled={saving}
+                  disabled={busy}
                   inputId="order-customer-search"
                   resultsId="order-customer-results"
                   onSelect={(customerId) => updateField("customer_id", customerId)}
@@ -760,8 +918,17 @@ export function OrdersPanel() {
                     value={form.order_date}
                     onChange={(event) => updateField("order_date", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={busy}
                   />
+                </label>
+                <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={form.is_paid}
+                    onChange={(event) => updateField("is_paid", event.target.checked)}
+                    disabled={busy}
+                  />
+                  Đã thanh toán
                 </label>
                 <label className="flex flex-col gap-1 text-sm sm:col-span-2">
                   Ghi chú đơn hàng
@@ -770,7 +937,7 @@ export function OrdersPanel() {
                     onChange={(event) => updateField("notes", event.target.value)}
                     rows={3}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={busy}
                   />
                 </label>
               </div>
@@ -787,7 +954,7 @@ export function OrdersPanel() {
                             value={typeFilter}
                             onChange={(event) => setTypeFilter(event.target.value)}
                             className={inputClass}
-                            disabled={saving}
+                            disabled={busy}
                           >
                             <option value={ALL_TYPES}>Tất cả</option>
                             {productTypes.names.map((typeName) => (
@@ -807,7 +974,7 @@ export function OrdersPanel() {
                           <ProductSearch
                             products={catalogProducts}
                             value={catalogQuery}
-                            disabled={saving}
+                            disabled={busy}
                             placeholder="Tìm sản phẩm theo tên"
                             inputId="order-catalog-search"
                             resultsId="order-catalog-results"
@@ -824,7 +991,7 @@ export function OrdersPanel() {
                     <button
                       type="button"
                       onClick={() => addCustomItem()}
-                      disabled={saving}
+                      disabled={busy}
                       className="h-10 rounded-lg border border-black/15 px-3 text-sm disabled:opacity-50 dark:border-white/20"
                     >
                       Thêm hàng khác
@@ -859,7 +1026,7 @@ export function OrdersPanel() {
                         <button
                           type="button"
                           onClick={() => removeItem(item.key)}
-                          disabled={saving}
+                          disabled={busy}
                           className="text-xs text-red-700 disabled:opacity-40 dark:text-red-300"
                         >
                           Xóa dòng
@@ -876,13 +1043,13 @@ export function OrdersPanel() {
                               }
                               placeholder="Phí vận chuyển, hàng mua ngoài..."
                               className={inputClass}
-                              disabled={saving}
+                              disabled={busy}
                             />
                           ) : (
                             <ProductSearch
                               products={catalogProducts}
                               value={item.product_name}
-                              disabled={saving}
+                              disabled={busy}
                               placeholder="Tìm hoặc gõ tên hàng"
                               inputId={`order-item-name-${item.key}`}
                               resultsId={`order-item-results-${item.key}`}
@@ -924,7 +1091,7 @@ export function OrdersPanel() {
                             value={item.unit}
                             onChange={(event) => updateItem(item.key, "unit", event.target.value)}
                             className={inputClass}
-                            disabled={saving}
+                            disabled={busy}
                           />
                         </label>
                         <label className="flex flex-col gap-1 text-sm lg:col-span-2">
@@ -937,7 +1104,7 @@ export function OrdersPanel() {
                               updateItem(item.key, "quantity", event.target.value)
                             }
                             className={inputClass}
-                            disabled={saving}
+                            disabled={busy}
                           />
                         </label>
                         <label className="flex flex-col gap-1 text-sm lg:col-span-2">
@@ -950,7 +1117,7 @@ export function OrdersPanel() {
                               updateItem(item.key, "selling_price", event.target.value)
                             }
                             className={inputClass}
-                            disabled={saving}
+                            disabled={busy}
                           />
                         </label>
                         <div className="flex flex-col justify-end text-sm lg:col-span-2">
@@ -966,7 +1133,7 @@ export function OrdersPanel() {
                             onChange={(event) =>
                               updateItem(item.key, "vat_invoice", event.target.checked)
                             }
-                            disabled={saving}
+                            disabled={busy}
                           />
                           Xuất hóa đơn VAT (10%)
                         </label>
@@ -992,7 +1159,7 @@ export function OrdersPanel() {
                             value={item.notes}
                             onChange={(event) => updateItem(item.key, "notes", event.target.value)}
                             className={inputClass}
-                            disabled={saving}
+                            disabled={busy}
                           />
                         </label>
                       </div>
@@ -1015,10 +1182,18 @@ export function OrdersPanel() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => void onGenerateFile()}
+                  disabled={busy}
+                  className="h-10 rounded-lg border border-black/15 px-4 text-sm font-medium disabled:opacity-50 dark:border-white/20"
+                >
+                  {generating ? "Đang tạo file..." : "Tạo file Google Sheet"}
+                </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={busy}
                   className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
                 >
                   {saving ? "Đang lưu..." : creating ? "Tạo đơn hàng" : "Lưu thay đổi"}

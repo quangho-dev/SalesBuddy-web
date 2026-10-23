@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { AppToaster } from "@/components/AppToaster";
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="h-full min-h-full flex flex-col">
         <ClerkProvider>
+          <AppToaster />
           <Suspense fallback={null}>
             <AppShell>{children}</AppShell>
           </Suspense>

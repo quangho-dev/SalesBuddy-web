@@ -2,8 +2,11 @@
 
 import { CustomerPicker, customerLabel } from "@/components/CustomerPicker";
 import { useAuth } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "react-toastify";
 import {
+  convertQuoteToOrder,
   createQuote,
   deleteQuote,
   generateQuoteFile,
@@ -288,6 +291,7 @@ function ProductSearch({
 }
 
 export function QuotesPanel() {
+  const router = useRouter();
   const { getToken } = useAuth();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -302,6 +306,7 @@ export function QuotesPanel() {
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [generatedFile, setGeneratedFile] = useState<GeneratedQuoteFile | null>(
     null,
   );
@@ -566,6 +571,7 @@ export function QuotesPanel() {
               contact_person: customer.contact_person,
               address: customer.address,
               phone_number: customer.phone_number,
+              tax_code: customer.tax_code,
             }
           : undefined,
         notes: payload.notes,
@@ -592,6 +598,52 @@ export function QuotesPanel() {
       );
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function onConvertToOrder() {
+    const payload = toPayload(form);
+    if (!payload.customer_id) {
+      toast.error("Hãy chọn khách hàng trước khi chuyển thành đơn hàng.");
+      return;
+    }
+    if (payload.items.length === 0) {
+      toast.error("Báo giá cần ít nhất một sản phẩm.");
+      return;
+    }
+
+    setConverting(true);
+    setError(null);
+    try {
+      const token = await withToken();
+      let quoteId = creating ? "" : selectedId ?? "";
+      if (creating) {
+        const created = await createQuote(token, payload);
+        setQuotes((current) => [created, ...current]);
+        setCreating(false);
+        setSelectedId(created.id);
+        setForm(fromQuote(created, products));
+        quoteId = created.id;
+      } else if (quoteId) {
+        const updated = await updateQuote(token, quoteId, payload);
+        setQuotes((current) =>
+          current.map((quote) => (quote.id === updated.id ? updated : quote)),
+        );
+        setForm(fromQuote(updated, products));
+      }
+      if (!quoteId) {
+        throw new Error("Không xác định được báo giá.");
+      }
+      const order = await convertQuoteToOrder(token, quoteId);
+      toast.success("Đã chuyển báo giá thành đơn hàng.");
+      router.push(`/orders?id=${encodeURIComponent(order.id)}`);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không chuyển được báo giá thành đơn hàng.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setConverting(false);
     }
   }
 
@@ -622,7 +674,7 @@ export function QuotesPanel() {
       ? `${customerLabel(selectedCustomer)} · ${quoteLabel(selected)}`
       : "Chi tiết báo giá";
   const totals = summarizeQuote(form.items);
-  const busy = saving || generating;
+  const busy = saving || generating || converting;
   const driveLink = quoteDriveLink(selected) || generatedFile?.web_link || "";
 
   return (
@@ -1137,6 +1189,14 @@ export function QuotesPanel() {
               </div>
 
               <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => void onConvertToOrder()}
+                  disabled={busy}
+                  className="h-10 rounded-lg border border-black/15 px-4 text-sm font-medium disabled:opacity-50 dark:border-white/20"
+                >
+                  {converting ? "Đang chuyển..." : "Chuyển thành đơn hàng"}
+                </button>
                 <button
                   type="button"
                   onClick={() => void onGenerateFile()}

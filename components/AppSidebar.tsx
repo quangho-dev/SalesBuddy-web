@@ -55,6 +55,13 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           Sản phẩm
         </Link>
         <Link
+          href="/quotes"
+          onClick={onNavigate}
+          className={navItemClass(pathname.startsWith("/quotes"))}
+        >
+          Báo giá
+        </Link>
+        <Link
           href="/orders"
           onClick={onNavigate}
           className={navItemClass(pathname.startsWith("/orders"))}
@@ -62,11 +69,11 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
           Đơn hàng
         </Link>
         <Link
-          href="/quotes"
+          href="/debts"
           onClick={onNavigate}
-          className={navItemClass(pathname.startsWith("/quotes"))}
+          className={navItemClass(pathname.startsWith("/debts"))}
         >
-          Báo giá
+          Công nợ
         </Link>
       </nav>
 

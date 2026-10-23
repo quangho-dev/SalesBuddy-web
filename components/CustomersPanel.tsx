@@ -22,6 +22,7 @@ const EMPTY_FORM: FormState = {
   contact_person: "",
   address: "",
   phone_number: "",
+  tax_code: "",
   website: "",
   facebook: "",
   zalo: "",
@@ -35,12 +36,25 @@ function customerLabel(customer: Pick<Customer, "company_name" | "contact_person
   return customer.company_name.trim() || customer.contact_person.trim() || "Khách hàng chưa đặt tên";
 }
 
+function sortHistory(items: CustomerInteraction[] | undefined | null) {
+  return [...(items ?? [])].sort((left, right) => {
+    const leftTime = left.created_at
+      ? Date.parse(left.created_at) || 0
+      : Number.POSITIVE_INFINITY;
+    const rightTime = right.created_at
+      ? Date.parse(right.created_at) || 0
+      : Number.POSITIVE_INFINITY;
+    return rightTime - leftTime;
+  });
+}
+
 function fromCustomer(customer: Customer): FormState {
   return {
     company_name: customer.company_name ?? "",
     contact_person: customer.contact_person ?? "",
     address: customer.address ?? "",
     phone_number: customer.phone_number ?? "",
+    tax_code: customer.tax_code ?? "",
     website: customer.website ?? "",
     facebook: customer.facebook ?? "",
     zalo: customer.zalo ?? "",
@@ -52,7 +66,17 @@ function formatWhen(value?: string) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("vi-VN");
+  return date.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function recentHistory(customer: Customer, limit = 3) {
+  return sortHistory(customer.interaction_history).slice(0, limit);
 }
 
 export function CustomersPanel() {
@@ -81,6 +105,7 @@ export function CustomersPanel() {
         customer.company_name,
         customer.contact_person,
         customer.phone_number,
+        customer.tax_code,
         customer.address,
         customer.zalo,
       ]
@@ -135,7 +160,7 @@ export function CustomersPanel() {
     const listed = customers.find((customer) => customer.id === customerId);
     if (listed) {
       setForm(fromCustomer(listed));
-      setHistory(listed.interaction_history ?? []);
+      setHistory(sortHistory(listed.interaction_history));
     }
     try {
       const token = await withToken();
@@ -144,7 +169,7 @@ export function CustomersPanel() {
         current.map((customer) => (customer.id === detail.id ? detail : customer)),
       );
       setForm(fromCustomer(detail));
-      setHistory(detail.interaction_history ?? []);
+      setHistory(sortHistory(detail.interaction_history));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được chi tiết khách hàng.");
     }
@@ -169,14 +194,14 @@ export function CustomersPanel() {
         setCreating(false);
         setSelectedId(created.id);
         setForm(fromCustomer(created));
-        setHistory(created.interaction_history ?? []);
+        setHistory(sortHistory(created.interaction_history));
       } else if (selectedId) {
         const updated = await updateCustomer(token, selectedId, form);
         setCustomers((current) =>
           current.map((customer) => (customer.id === updated.id ? updated : customer)),
         );
         setForm(fromCustomer(updated));
-        setHistory(updated.interaction_history ?? history);
+        setHistory(sortHistory(updated.interaction_history ?? history));
       }
       setConfirmDelete(false);
     } catch (err) {
@@ -210,7 +235,7 @@ export function CustomersPanel() {
     const content = newInteraction.trim();
     if (!content) return;
 
-    const nextHistory = [...history, { content }];
+    const nextHistory = [{ content }, ...history];
     if (creating || !selectedId) {
       setHistory(nextHistory);
       setNewInteraction("");
@@ -227,7 +252,7 @@ export function CustomersPanel() {
       setCustomers((current) =>
         current.map((customer) => (customer.id === updated.id ? updated : customer)),
       );
-      setHistory(updated.interaction_history ?? nextHistory);
+      setHistory(sortHistory(updated.interaction_history ?? nextHistory));
       setNewInteraction("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thêm được lịch sử tương tác.");
@@ -253,7 +278,7 @@ export function CustomersPanel() {
       setCustomers((current) =>
         current.map((customer) => (customer.id === updated.id ? updated : customer)),
       );
-      setHistory(updated.interaction_history ?? nextHistory);
+      setHistory(sortHistory(updated.interaction_history ?? nextHistory));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không xóa được lịch sử tương tác.");
     } finally {
@@ -362,7 +387,7 @@ export function CustomersPanel() {
 
       <div className="flex min-h-0 flex-1">
         <aside
-          className={`flex w-full min-h-0 flex-col border-r border-black/10 md:w-80 dark:border-white/10 ${
+          className={`flex w-full min-h-0 flex-col border-r border-black/10 md:w-[32rem] dark:border-white/10 ${
             showEditor ? "hidden md:flex" : "flex"
           }`}
         >
@@ -392,29 +417,67 @@ export function CustomersPanel() {
             ) : (
               filtered.map((customer) => {
                 const active = customer.id === selectedId && !creating;
+                const previews = recentHistory(customer);
                 return (
                   <li key={customer.id}>
                     <button
                       type="button"
                       onClick={() => void openCustomer(customer.id)}
-                      className={`w-full rounded-lg px-3 py-3 text-left ${
+                      className={`flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left ${
                         active
                           ? "bg-black text-white dark:bg-white dark:text-black"
                           : "hover:bg-black/5 dark:hover:bg-white/10"
                       }`}
                     >
-                      <p className="truncate text-sm font-medium">
-                        {customerLabel(customer)}
-                      </p>
-                      <p
-                        className={`mt-0.5 truncate text-xs ${
-                          active ? "opacity-80" : "text-black/55 dark:text-white/55"
-                        }`}
-                      >
-                        {customer.contact_person && customer.company_name
-                          ? customer.contact_person
-                          : customer.phone_number || customer.address || "Chưa có thông tin liên hệ"}
-                      </p>
+                      <div className="min-w-0 w-[38%] shrink-0">
+                        <p className="truncate text-sm font-medium">
+                          {customerLabel(customer)}
+                        </p>
+                        <p
+                          className={`mt-0.5 truncate text-xs ${
+                            active ? "opacity-80" : "text-black/55 dark:text-white/55"
+                          }`}
+                        >
+                          {customer.contact_person && customer.company_name
+                            ? customer.contact_person
+                            : customer.phone_number || customer.address || "Chưa có thông tin liên hệ"}
+                        </p>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        {previews.length > 0 ? (
+                          <ul className="flex flex-col gap-1.5">
+                            {previews.map((item, index) => (
+                              <li
+                                key={item.id ?? `${item.content}-${index}`}
+                                className={`rounded-md px-2 py-1.5 ${
+                                  active
+                                    ? "bg-white/15"
+                                    : "bg-black/[0.04] dark:bg-white/[0.06]"
+                                }`}
+                              >
+                                <p
+                                  className={`text-xs font-medium ${
+                                    active ? "opacity-80" : "text-black/55 dark:text-white/55"
+                                  }`}
+                                >
+                                  {item.created_at ? formatWhen(item.created_at) : "Chưa lưu"}
+                                </p>
+                                <p className="mt-0.5 line-clamp-2 text-sm leading-snug">
+                                  {item.content}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p
+                            className={`text-sm ${
+                              active ? "opacity-70" : "text-black/45 dark:text-white/45"
+                            }`}
+                          >
+                            Chưa có lịch sử tương tác
+                          </p>
+                        )}
+                      </div>
                     </button>
                   </li>
                 );
@@ -526,6 +589,15 @@ export function CustomersPanel() {
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
+                  Mã số thuế
+                  <input
+                    value={form.tax_code}
+                    onChange={(event) => updateField("tax_code", event.target.value)}
+                    className={inputClass}
+                    disabled={saving}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
                   Zalo
                   <input
                     value={form.zalo}
@@ -585,19 +657,17 @@ export function CustomersPanel() {
                     history.map((item, index) => (
                       <li
                         key={item.id ?? `${item.content}-${index}`}
-                        className="flex items-start justify-between gap-3 rounded-lg border border-black/10 px-3 py-2 text-sm dark:border-white/15"
+                        className="flex items-start justify-between gap-3 rounded-lg border border-black/10 px-3 py-2.5 text-sm dark:border-white/15"
                       >
-                        <div>
-                          <p className="whitespace-pre-wrap">{item.content}</p>
-                          {item.created_at ? (
-                            <p className="mt-1 text-xs text-black/50 dark:text-white/50">
-                              {formatWhen(item.created_at)}
-                            </p>
-                          ) : (
-                            <p className="mt-1 text-xs text-black/50 dark:text-white/50">
-                              Sẽ lưu khi tạo khách hàng
-                            </p>
-                          )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-black/55 dark:text-white/55">
+                            {item.created_at
+                              ? formatWhen(item.created_at)
+                              : "Sẽ lưu khi tạo khách hàng"}
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap leading-relaxed">
+                            {item.content}
+                          </p>
                         </div>
                         <button
                           type="button"

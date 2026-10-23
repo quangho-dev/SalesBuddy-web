@@ -13,6 +13,7 @@ export type Customer = {
   contact_person: string;
   address: string;
   phone_number: string;
+  tax_code: string;
   website: string;
   facebook: string;
   zalo: string;
@@ -64,6 +65,8 @@ export type OrderCustomer = {
   company_name: string;
   contact_person: string;
   phone_number: string;
+  address?: string;
+  tax_code?: string;
 };
 
 export type OrderItem = {
@@ -82,6 +85,11 @@ export type Order = {
   customer_id: string;
   order_date: string;
   notes: string;
+  is_paid: boolean;
+  quote_id?: string | null;
+  drive_file_id?: string;
+  drive_file_name?: string;
+  drive_web_link?: string;
   created_at: string;
   updated_at: string;
   customers?: OrderCustomer | null;
@@ -101,7 +109,27 @@ export type OrderInput = {
   customer_id: string;
   order_date?: string | null;
   notes: string;
+  is_paid: boolean;
   items: OrderItemInput[];
+};
+
+export type PaymentMethod = "cash" | "bank_transfer";
+
+export type Payment = {
+  id: string;
+  order_id: string;
+  amount: number | string;
+  payment_date: string;
+  payment_method: PaymentMethod;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaymentInput = {
+  order_id: string;
+  amount: number;
+  payment_date?: string | null;
+  payment_method: PaymentMethod;
 };
 
 export type QuoteItem = {
@@ -151,6 +179,7 @@ export type CustomerInput = {
   contact_person: string;
   address: string;
   phone_number: string;
+  tax_code: string;
   website: string;
   facebook: string;
   zalo: string;
@@ -372,11 +401,16 @@ export async function downloadProductTemplate(token: string): Promise<void> {
 
 export async function listOrders(
   token: string,
-  customerId?: string,
+  filters?: { customerId?: string; isPaid?: boolean },
 ): Promise<Order[]> {
-  const query = customerId
-    ? `?customer_id=${encodeURIComponent(customerId)}`
-    : "";
+  const params = new URLSearchParams();
+  if (filters?.customerId) {
+    params.set("customer_id", filters.customerId);
+  }
+  if (filters?.isPaid !== undefined) {
+    params.set("is_paid", String(filters.isPaid));
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
   return apiJson<Order[]>(`/api/orders/${query}`, token);
 }
 
@@ -411,6 +445,94 @@ export async function deleteOrder(
 ): Promise<{ deleted: boolean; order: Order }> {
   return apiJson<{ deleted: boolean; order: Order }>(
     `/api/orders/${orderId}`,
+    token,
+    { method: "DELETE" },
+  );
+}
+
+export type OrderFileCustomerInput = {
+  company_name?: string;
+  contact_person?: string;
+  address?: string;
+  phone_number?: string;
+  tax_code?: string;
+  email?: string;
+};
+
+export type GenerateOrderFileInput = {
+  order_id?: string;
+  customer?: OrderFileCustomerInput;
+  notes?: string;
+  items?: OrderItemInput[];
+  order_number?: string;
+  order_date?: string;
+};
+
+export type GeneratedOrderFile = {
+  file_id: string;
+  file_name: string;
+  web_link: string;
+  sheet_name: string;
+  summary: string;
+  template_name: string;
+  order: Record<string, unknown>;
+};
+
+export async function generateOrderFile(
+  token: string,
+  payload: GenerateOrderFileInput,
+): Promise<GeneratedOrderFile> {
+  return apiJson<GeneratedOrderFile>("/api/orders/generate-file", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(300_000),
+  });
+}
+
+export async function listPayments(
+  token: string,
+  orderId?: string,
+): Promise<Payment[]> {
+  const query = orderId
+    ? `?order_id=${encodeURIComponent(orderId)}`
+    : "";
+  return apiJson<Payment[]>(`/api/payments/${query}`, token);
+}
+
+export async function getPayment(
+  token: string,
+  paymentId: string,
+): Promise<Payment> {
+  return apiJson<Payment>(`/api/payments/${paymentId}`, token);
+}
+
+export async function createPayment(
+  token: string,
+  payload: PaymentInput,
+): Promise<Payment> {
+  return apiJson<Payment>("/api/payments/", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updatePayment(
+  token: string,
+  paymentId: string,
+  payload: Partial<PaymentInput>,
+): Promise<Payment> {
+  return apiJson<Payment>(`/api/payments/${paymentId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePayment(
+  token: string,
+  paymentId: string,
+): Promise<{ deleted: boolean; payment: Payment }> {
+  return apiJson<{ deleted: boolean; payment: Payment }>(
+    `/api/payments/${paymentId}`,
     token,
     { method: "DELETE" },
   );
@@ -460,6 +582,15 @@ export async function deleteQuote(
     token,
     { method: "DELETE" },
   );
+}
+
+export async function convertQuoteToOrder(
+  token: string,
+  quoteId: string,
+): Promise<Order> {
+  return apiJson<Order>(`/api/quotes/${quoteId}/convert-to-order`, token, {
+    method: "POST",
+  });
 }
 
 export type QuoteFileCustomerInput = {
