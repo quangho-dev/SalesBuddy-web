@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createCustomer, type Customer } from "@/lib/api";
+import { createCustomer, getSettings, type Customer } from "@/lib/api";
 
 const inputClass =
   "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50";
@@ -12,6 +12,7 @@ const EMPTY_NEW = {
   phone_number: "",
   contact_person: "",
   tax_code: "",
+  payment_term_days: "3",
 };
 
 export function customerLabel(
@@ -65,6 +66,7 @@ export function CustomerPicker({
   const [saving, setSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [newCustomer, setNewCustomer] = useState(EMPTY_NEW);
+  const defaultTermRef = useRef("3");
   const rootRef = useRef<HTMLDivElement>(null);
   const selected = customers.find((customer) => customer.id === selectedId) ?? null;
   const busy = disabled || saving;
@@ -80,6 +82,26 @@ export function CustomerPicker({
       setQuery(row.company_name.trim() || row.phone_number.trim());
     }
   }, [customers, selectedId]);
+
+  useEffect(() => {
+    if (!allowCreate) return;
+    let cancelled = false;
+    async function loadDefaultTerm() {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const settings = await getSettings(token);
+        if (cancelled) return;
+        defaultTermRef.current = String(settings.default_payment_term_days ?? 3);
+      } catch {
+        // Keep the built-in default of 3 days.
+      }
+    }
+    void loadDefaultTerm();
+    return () => {
+      cancelled = true;
+    };
+  }, [allowCreate, getToken]);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -115,6 +137,7 @@ export function CustomerPicker({
     setNewCustomer({
       ...EMPTY_NEW,
       company_name: query.trim(),
+      payment_term_days: defaultTermRef.current,
     });
   }
 
@@ -139,6 +162,10 @@ export function CustomerPicker({
         phone_number,
         contact_person,
         tax_code: newCustomer.tax_code.trim(),
+        payment_term_days: Math.max(
+          0,
+          Math.round(Number(newCustomer.payment_term_days) || 0),
+        ),
         address: "",
         website: "",
         facebook: "",
@@ -147,7 +174,10 @@ export function CustomerPicker({
       });
       onCreated?.(created);
       pick(created);
-      setNewCustomer(EMPTY_NEW);
+      setNewCustomer({
+        ...EMPTY_NEW,
+        payment_term_days: defaultTermRef.current,
+      });
       setCreating(false);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Không tạo được khách hàng.");
@@ -263,6 +293,23 @@ export function CustomerPicker({
                   setNewCustomer((current) => ({
                     ...current,
                     tax_code: event.target.value,
+                  }))
+                }
+                className={inputClass}
+                disabled={saving}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+              Hạn công nợ (ngày)
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={newCustomer.payment_term_days}
+                onChange={(event) =>
+                  setNewCustomer((current) => ({
+                    ...current,
+                    payment_term_days: event.target.value,
                   }))
                 }
                 className={inputClass}

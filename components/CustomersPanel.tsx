@@ -7,6 +7,7 @@ import {
   deleteCustomer,
   downloadCustomerTemplate,
   getCustomer,
+  getSettings,
   importCustomers,
   listCustomers,
   updateCustomer,
@@ -15,7 +16,9 @@ import {
   type CustomerInteraction,
 } from "@/lib/api";
 
-type FormState = Omit<CustomerInput, "interaction_history">;
+type FormState = Omit<CustomerInput, "interaction_history" | "payment_term_days"> & {
+  payment_term_days: string;
+};
 
 const EMPTY_FORM: FormState = {
   company_name: "",
@@ -23,6 +26,7 @@ const EMPTY_FORM: FormState = {
   address: "",
   phone_number: "",
   tax_code: "",
+  payment_term_days: "3",
   website: "",
   facebook: "",
   zalo: "",
@@ -55,10 +59,19 @@ function fromCustomer(customer: Customer): FormState {
     address: customer.address ?? "",
     phone_number: customer.phone_number ?? "",
     tax_code: customer.tax_code ?? "",
+    payment_term_days: String(customer.payment_term_days ?? 0),
     website: customer.website ?? "",
     facebook: customer.facebook ?? "",
     zalo: customer.zalo ?? "",
     notes: customer.notes ?? "",
+  };
+}
+
+function toCustomerPayload(form: FormState): CustomerInput {
+  const days = Number(form.payment_term_days);
+  return {
+    ...form,
+    payment_term_days: Number.isFinite(days) ? Math.max(0, Math.round(days)) : 0,
   };
 }
 
@@ -94,6 +107,7 @@ export function CustomersPanel() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const defaultTermRef = useRef("3");
 
   const selected = customers.find((customer) => customer.id === selectedId) ?? null;
 
@@ -141,10 +155,28 @@ export function CustomersPanel() {
     void loadList();
   }, [loadList]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDefaultTerm() {
+      try {
+        const token = await withToken();
+        const settings = await getSettings(token);
+        if (cancelled) return;
+        defaultTermRef.current = String(settings.default_payment_term_days ?? 3);
+      } catch {
+        // Keep the built-in default of 3 days.
+      }
+    }
+    void loadDefaultTerm();
+    return () => {
+      cancelled = true;
+    };
+  }, [withToken]);
+
   function openCreate() {
     setCreating(true);
     setSelectedId(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, payment_term_days: defaultTermRef.current });
     setHistory([]);
     setNewInteraction("");
     setConfirmDelete(false);
@@ -187,7 +219,7 @@ export function CustomersPanel() {
       const token = await withToken();
       if (creating) {
         const created = await createCustomer(token, {
-          ...form,
+          ...toCustomerPayload(form),
           interaction_history: history,
         });
         setCustomers((current) => [created, ...current]);
@@ -196,7 +228,7 @@ export function CustomersPanel() {
         setForm(fromCustomer(created));
         setHistory(sortHistory(created.interaction_history));
       } else if (selectedId) {
-        const updated = await updateCustomer(token, selectedId, form);
+        const updated = await updateCustomer(token, selectedId, toCustomerPayload(form));
         setCustomers((current) =>
           current.map((customer) => (customer.id === updated.id ? updated : customer)),
         );
@@ -597,6 +629,21 @@ export function CustomersPanel() {
                     disabled={saving}
                   />
                 </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  Hạn công nợ (ngày)
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={form.payment_term_days}
+                    onChange={(event) => updateField("payment_term_days", event.target.value)}
+                    className={inputClass}
+                    disabled={saving}
+                  />
+                </label>
+                <p className="sm:col-span-2 text-xs text-black/55 dark:text-white/55">
+                  Số ngày khách được nợ kể từ ngày tạo đơn hàng. Khách mới lấy hạn mặc định trong Cài đặt, rồi có thể đổi riêng tại đây.
+                </p>
                 <label className="flex flex-col gap-1 text-sm">
                   Zalo
                   <input

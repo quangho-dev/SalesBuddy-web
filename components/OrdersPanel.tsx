@@ -18,6 +18,7 @@ import {
   type GeneratedOrderFile,
   type Order,
   type OrderInput,
+  type PaymentMethod,
   type Product,
 } from "@/lib/api";
 
@@ -37,6 +38,8 @@ type FormState = {
   order_date: string;
   notes: string;
   is_paid: boolean;
+  payment_method: "" | PaymentMethod;
+  paid_amount: string;
   items: ItemForm[];
 };
 
@@ -88,8 +91,16 @@ function emptyForm(customerId = ""): FormState {
     order_date: todayIso(),
     notes: "",
     is_paid: false,
+    payment_method: "",
+    paid_amount: "0",
     items: [newItem()],
   };
+}
+
+function paymentMethodLabel(method?: string | null) {
+  if (method === "cash") return "Tiền mặt";
+  if (method === "bank_transfer") return "Chuyển khoản";
+  return "";
 }
 
 function orderDriveLink(order?: Order | null) {
@@ -133,6 +144,8 @@ function fromOrder(order: Order, products: Product[] = []): FormState {
     order_date: (order.order_date ?? todayIso()).slice(0, 10),
     notes: order.notes ?? "",
     is_paid: Boolean(order.is_paid),
+    payment_method: order.payment_method === "bank_transfer" ? "bank_transfer" : order.payment_method === "cash" ? "cash" : "",
+    paid_amount: String(toNumber(order.paid_amount)),
     items:
       order.items?.length > 0
         ? order.items.map((item) =>
@@ -171,6 +184,8 @@ function toPayload(form: FormState): OrderInput {
     order_date: form.order_date || null,
     notes: form.notes,
     is_paid: Boolean(form.is_paid),
+    payment_method: form.payment_method || null,
+    paid_amount: Math.max(0, toNumber(form.paid_amount)),
     items,
   };
 }
@@ -526,6 +541,14 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
       toast.error("Đơn hàng cần ít nhất một sản phẩm.");
       return;
     }
+    if (payload.is_paid && !payload.payment_method) {
+      toast.error("Hãy chọn hình thức thanh toán trước khi đánh dấu đã thanh toán.");
+      return;
+    }
+    if (payload.is_paid && payload.paid_amount <= 0) {
+      toast.error("Nhập tổng số tiền thanh toán.");
+      return;
+    }
 
     setSaving(true);
     const wasCreating = creating;
@@ -753,6 +776,12 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                             {formatDate(order.order_date)}
                             {items.some((item) => item.vat_invoice) ? " · VAT" : ""}
                             {order.is_paid ? " · Đã thanh toán" : " · Chưa thanh toán"}
+                            {paymentMethodLabel(order.payment_method)
+                              ? ` · ${paymentMethodLabel(order.payment_method)}`
+                              : ""}
+                            {toNumber(order.paid_amount) > 0
+                              ? ` · Đã trả ${formatPrice(order.paid_amount)}đ`
+                              : ""}
                             {" · "}
                             {items.length} SP
                             {" · "}
@@ -925,11 +954,55 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                   <input
                     type="checkbox"
                     checked={form.is_paid}
-                    onChange={(event) => updateField("is_paid", event.target.checked)}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setForm((current) => ({
+                        ...current,
+                        is_paid: checked,
+                        paid_amount:
+                          checked && toNumber(current.paid_amount) <= 0
+                            ? String(summarizeOrder(current.items).grand)
+                            : current.paid_amount,
+                      }));
+                    }}
                     disabled={busy}
                   />
                   Đã thanh toán
                 </label>
+                {form.is_paid ? (
+                  <>
+                    <label className="flex flex-col gap-1 text-sm">
+                      Hình thức thanh toán
+                      <select
+                        value={form.payment_method}
+                        onChange={(event) =>
+                          updateField(
+                            "payment_method",
+                            event.target.value as FormState["payment_method"],
+                          )
+                        }
+                        className={inputClass}
+                        disabled={busy}
+                      >
+                        <option value="">Chưa chọn</option>
+                        <option value="cash">Tiền mặt</option>
+                        <option value="bank_transfer">Chuyển khoản</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-sm">
+                      Tổng số tiền thanh toán
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={form.paid_amount}
+                        onChange={(event) => updateField("paid_amount", event.target.value)}
+                        className={inputClass}
+                        disabled={busy}
+                      />
+                    </label>
+                  </>
+                ) : null}
                 <label className="flex flex-col gap-1 text-sm sm:col-span-2">
                   Ghi chú đơn hàng
                   <textarea
@@ -1179,6 +1252,20 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                     <span>Tổng cộng</span>
                     <span>{formatPrice(totals.grand)}đ</span>
                   </p>
+                  {form.is_paid ? (
+                    <>
+                      <p className="flex justify-between gap-4">
+                        <span className="text-black/60 dark:text-white/60">Đã thanh toán</span>
+                        <span>{formatPrice(form.paid_amount)}đ</span>
+                      </p>
+                      <p className="flex justify-between gap-4 font-bold">
+                        <span>Còn lại</span>
+                        <span>
+                          {formatPrice(Math.max(0, totals.grand - toNumber(form.paid_amount)))}đ
+                        </span>
+                      </p>
+                    </>
+                  ) : null}
                 </div>
               </div>
 

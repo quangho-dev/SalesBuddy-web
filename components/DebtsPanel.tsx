@@ -8,7 +8,6 @@ import { toast } from "react-toastify";
 import {
   listCustomers,
   listOrders,
-  updateOrder,
   type Customer,
   type Order,
 } from "@/lib/api";
@@ -32,6 +31,30 @@ function formatDate(value?: string): string {
   const [year, month, day] = iso.split("-");
   if (!year || !month || !day) return value ?? "";
   return `${day}/${month}/${year}`;
+}
+
+function todayIso(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function paymentTermDays(
+  customer?: { payment_term_days?: number | string } | null,
+): number {
+  return Math.max(0, Math.round(toNumber(customer?.payment_term_days)));
+}
+
+function dueDateIso(orderDate: string | undefined, days: number): string {
+  const iso = (orderDate ?? "").slice(0, 10);
+  const [year, month, day] = iso.split("-").map(Number);
+  if (!year || !month || !day) return "";
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function orderCustomer(order: Order, customers: Customer[]) {
@@ -60,6 +83,20 @@ function orderTotal(order: Order): number {
   return items.reduce((sum, item) => sum + lineTotal(item) + lineVat(item), 0);
 }
 
+function amountPaid(order: Order): number {
+  return Math.max(0, toNumber(order.paid_amount));
+}
+
+function orderRemaining(order: Order): number {
+  return Math.max(0, orderTotal(order) - amountPaid(order));
+}
+
+function paymentMethodLabel(method?: string | null) {
+  if (method === "cash") return "Tiền mặt";
+  if (method === "bank_transfer") return "Chuyển khoản";
+  return "";
+}
+
 export function DebtsPanel() {
   const { getToken } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -68,7 +105,6 @@ export function DebtsPanel() {
   const [query, setQuery] = useState("");
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS);
   const [loadingList, setLoadingList] = useState(true);
-  const [saving, setSaving] = useState(false);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
 
@@ -96,7 +132,7 @@ export function DebtsPanel() {
   }, [customers, customerFilter, orders, query]);
 
   const outstandingTotal = useMemo(
-    () => filtered.reduce((sum, order) => sum + orderTotal(order), 0),
+    () => filtered.reduce((sum, order) => sum + orderRemaining(order), 0),
     [filtered],
   );
 
@@ -141,23 +177,6 @@ export function DebtsPanel() {
     if (selectedId && filtered.some((order) => order.id === selectedId)) return;
     setSelectedId(filtered[0]?.id ?? null);
   }, [filtered, selectedId]);
-
-  async function markPaid() {
-    if (!selectedId) return;
-    setSaving(true);
-    try {
-      const token = await withToken();
-      await updateOrder(token, selectedId, { is_paid: true });
-      setOrders((current) => current.filter((order) => order.id !== selectedId));
-      toast.success("Đã đánh dấu đơn hàng là đã thanh toán.");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Không cập nhật được thanh toán.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
 
   const showDetail = selectedId !== null;
   const selectedCustomer = selected ? orderCustomer(selected, customers) : null;
@@ -242,6 +261,8 @@ export function DebtsPanel() {
                 const active = order.id === selectedId;
                 const customer = orderCustomer(order, customers);
                 const items = order.items ?? [];
+                const dueIso = dueDateIso(order.order_date, paymentTermDays(customer));
+                const overdue = Boolean(dueIso && dueIso < todayIso());
                 return (
                   <li key={order.id}>
                     <button
@@ -257,11 +278,13 @@ export function DebtsPanel() {
                       <p className="mt-0.5 truncate text-xs">
                         <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                           {formatDate(order.order_date)}
+                          {dueIso ? ` · Hạn ${formatDate(dueIso)}` : ""}
+                          {overdue ? " · Quá hạn" : ""}
                           {" · "}
                           {items.length} SP
                           {" · "}
                         </span>
-                        <span className="font-bold">{formatPrice(orderTotal(order))}đ</span>
+                        <span className="font-bold">{formatPrice(orderRemaining(order))}đ</span>
                       </p>
                       {items[0]?.product_name ? (
                         <p
@@ -319,6 +342,16 @@ export function DebtsPanel() {
                     {selectedCustomer.phone_number}
                   </p>
                 ) : null}
+                <p className="mt-1 text-xs text-black/60 dark:text-white/60">
+                  Hạn công nợ: {paymentTermDays(selectedCustomer)} ngày kể từ ngày tạo đơn
+                  {dueDateIso(selected.order_date, paymentTermDays(selectedCustomer))
+                    ? ` · Hạn thanh toán ${formatDate(dueDateIso(selected.order_date, paymentTermDays(selectedCustomer)))}`
+                    : ""}
+                  {dueDateIso(selected.order_date, paymentTermDays(selectedCustomer)) &&
+                  dueDateIso(selected.order_date, paymentTermDays(selectedCustomer)) < todayIso()
+                    ? " · Quá hạn"
+                    : ""}
+                </p>
               </div>
 
               {selected.notes.trim() ? (
@@ -364,21 +397,23 @@ export function DebtsPanel() {
                     <span>{formatPrice(selectedTotals.vat)}đ</span>
                   </p>
                   <p className="flex justify-between gap-4 font-bold">
-                    <span>Công nợ</span>
+                    <span>Tổng cộng</span>
                     <span>{formatPrice(selectedTotals.grand)}đ</span>
                   </p>
+                  <p className="flex justify-between gap-4">
+                    <span className="text-black/60 dark:text-white/60">
+                      Đã thanh toán
+                      {paymentMethodLabel(selected.payment_method)
+                        ? ` · ${paymentMethodLabel(selected.payment_method)}`
+                        : ""}
+                    </span>
+                    <span>{formatPrice(amountPaid(selected))}đ</span>
+                  </p>
+                  <p className="flex justify-between gap-4 font-bold">
+                    <span>Còn lại</span>
+                    <span>{formatPrice(orderRemaining(selected))}đ</span>
+                  </p>
                 </div>
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => void markPaid()}
-                  disabled={saving}
-                  className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-                >
-                  {saving ? "Đang cập nhật..." : "Đánh dấu đã thanh toán"}
-                </button>
               </div>
             </div>
           )}

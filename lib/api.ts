@@ -14,6 +14,7 @@ export type Customer = {
   address: string;
   phone_number: string;
   tax_code: string;
+  payment_term_days: number;
   website: string;
   facebook: string;
   zalo: string;
@@ -67,6 +68,7 @@ export type OrderCustomer = {
   phone_number: string;
   address?: string;
   tax_code?: string;
+  payment_term_days?: number | string;
 };
 
 export type OrderItem = {
@@ -86,6 +88,8 @@ export type Order = {
   order_date: string;
   notes: string;
   is_paid: boolean;
+  payment_method: PaymentMethod | null;
+  paid_amount: number | string;
   quote_id?: string | null;
   drive_file_id?: string;
   drive_file_name?: string;
@@ -110,6 +114,8 @@ export type OrderInput = {
   order_date?: string | null;
   notes: string;
   is_paid: boolean;
+  payment_method: PaymentMethod | null;
+  paid_amount: number;
   items: OrderItemInput[];
 };
 
@@ -174,12 +180,17 @@ export type QuoteInput = {
   items: QuoteItemInput[];
 };
 
+export type AppSettings = {
+  default_payment_term_days: number;
+};
+
 export type CustomerInput = {
   company_name: string;
   contact_person: string;
   address: string;
   phone_number: string;
   tax_code: string;
+  payment_term_days: number;
   website: string;
   facebook: string;
   zalo: string;
@@ -227,6 +238,20 @@ export async function sendChatMessage(
   });
   const reply = payload.response;
   return typeof reply === "string" ? reply : JSON.stringify(reply);
+}
+
+export async function getSettings(token: string): Promise<AppSettings> {
+  return apiJson<AppSettings>("/api/settings/", token);
+}
+
+export async function updateSettings(
+  token: string,
+  payload: AppSettings,
+): Promise<AppSettings> {
+  return apiJson<AppSettings>("/api/settings/", token, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function listCustomers(token: string): Promise<Customer[]> {
