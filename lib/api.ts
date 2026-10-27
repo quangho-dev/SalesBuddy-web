@@ -51,6 +51,7 @@ export type ProductInput = {
 export type ProductImportResult = {
   imported: number;
   skipped: number;
+  duplicates?: number;
   errors: { row: number; message: string }[];
   products: Product[];
 };
@@ -58,6 +59,7 @@ export type ProductImportResult = {
 export type CustomerImportResult = {
   imported: number;
   skipped: number;
+  duplicates?: number;
   customers: Customer[];
 };
 

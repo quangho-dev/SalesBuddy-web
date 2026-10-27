@@ -263,10 +263,16 @@ export function ProductsPanel() {
       const result = await importProducts(token, file);
       setProducts((current) => [...result.products, ...current]);
       const errorCount = result.errors.length;
+      const notes = [
+        result.duplicates
+          ? `bỏ qua ${result.duplicates} sản phẩm trùng mã và tên`
+          : "",
+        result.skipped ? `bỏ qua ${result.skipped} dòng trống` : "",
+        errorCount ? `${errorCount} dòng lỗi` : "",
+      ].filter(Boolean);
       setNotice(
         `Đã import ${result.imported} sản phẩm` +
-          (result.skipped ? `, bỏ qua ${result.skipped} dòng trống` : "") +
-          (errorCount ? `, ${errorCount} dòng lỗi` : "") +
+          (notes.length ? `, ${notes.join(", ")}` : "") +
           ".",
       );
     } catch (err) {

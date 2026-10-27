@@ -184,6 +184,7 @@ function ProductSearch({
   onQueryChange,
   onPick,
   onUseCustom,
+  multiline = false,
 }: {
   products: Product[];
   value: string;
@@ -194,9 +195,18 @@ function ProductSearch({
   onQueryChange: (value: string) => void;
   onPick: (product: Product) => void;
   onUseCustom?: (name: string) => void;
+  multiline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const field = areaRef.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${field.scrollHeight}px`;
+  }, [value]);
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -212,29 +222,39 @@ function ProductSearch({
     return products.filter((product) => matchesProductSearch(product, value)).slice(0, 12);
   }, [products, value]);
 
+  const fieldProps = {
+    id: inputId,
+    value,
+    onChange: (event: { target: { value: string } }) => {
+      onQueryChange(event.target.value);
+      setOpen(true);
+    },
+    onFocus: () => setOpen(true),
+    placeholder,
+    disabled,
+    autoComplete: "off" as const,
+    role: "combobox" as const,
+    "aria-expanded": open,
+    "aria-controls": resultsId,
+  };
+
   return (
     <div ref={rootRef} className="relative">
-      <input
-        id={inputId}
-        value={value}
-        onChange={(event) => {
-          onQueryChange(event.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        placeholder={placeholder}
-        className={inputClass}
-        disabled={disabled}
-        autoComplete="off"
-        role="combobox"
-        aria-expanded={open}
-        aria-controls={resultsId}
-      />
+      {multiline ? (
+        <textarea
+          {...fieldProps}
+          ref={areaRef}
+          rows={1}
+          className={`${inputClass} resize-none overflow-hidden`}
+        />
+      ) : (
+        <input {...fieldProps} className={inputClass} />
+      )}
       {open && !disabled && (products.length > 0 || (onUseCustom && value.trim())) ? (
         <ul
           id={resultsId}
           role="listbox"
-          className="absolute top-full z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-black/15 bg-white py-1 shadow-lg dark:border-white/20 dark:bg-zinc-950"
+          className="absolute top-full z-30 mt-1 max-h-80 w-[min(36rem,calc(100vw-2rem))] min-w-full overflow-y-auto rounded-lg border border-black/15 bg-white py-1 shadow-lg dark:border-white/20 dark:bg-zinc-950"
         >
           {onUseCustom && value.trim() ? (
             <li>
@@ -246,8 +266,10 @@ function ProductSearch({
                 }}
                 className="flex w-full flex-col px-3 py-2 text-left hover:bg-black/5 dark:hover:bg-white/10"
               >
-                <span className="truncate font-medium">Thêm “{value.trim()}”</span>
-                <span className="truncate text-xs text-black/55 dark:text-white/55">
+                <span className="whitespace-normal break-words font-medium">
+                  Thêm “{value.trim()}”
+                </span>
+                <span className="text-xs text-black/55 dark:text-white/55">
                   Hàng ngoài kho — phí vận chuyển, hàng mua ngoài...
                 </span>
               </button>
@@ -269,12 +291,15 @@ function ProductSearch({
                   }}
                   className="flex w-full flex-col px-3 py-2 text-left hover:bg-black/5 dark:hover:bg-white/10"
                 >
-                  <span className="truncate font-medium">{productLabel(product)}</span>
-                  <span className="truncate text-xs text-black/55 dark:text-white/55">
+                  <span className="whitespace-normal break-words font-medium">
+                    {productLabel(product)}
+                  </span>
+                  <span className="whitespace-normal break-words text-xs text-black/55 dark:text-white/55">
                     {[
                       product.product_code.trim() || null,
                       product.product_type.trim() || null,
                       product.unit.trim() || null,
+                      `Tồn kho ${formatPrice(product.stock)}`,
                       `${formatPrice(product.selling_price)}đ`,
                     ]
                       .filter(Boolean)
@@ -1039,16 +1064,22 @@ export function QuotesPanel() {
                         </button>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12">
-                        <label className="flex flex-col gap-1 text-sm lg:col-span-4">
+                        <label className="flex flex-col gap-1 text-sm sm:col-span-2 lg:col-span-12">
                           Tên hàng
                           {item.custom ? (
-                            <input
+                            <textarea
                               value={item.product_name}
                               onChange={(event) =>
                                 updateItem(item.key, "product_name", event.target.value)
                               }
+                              ref={(node) => {
+                                if (!node) return;
+                                node.style.height = "auto";
+                                node.style.height = `${node.scrollHeight}px`;
+                              }}
                               placeholder="Phí vận chuyển, hàng mua ngoài..."
-                              className={inputClass}
+                              rows={1}
+                              className={`${inputClass} resize-none overflow-hidden`}
                               disabled={busy}
                             />
                           ) : (
@@ -1056,6 +1087,7 @@ export function QuotesPanel() {
                               products={catalogProducts}
                               value={item.product_name}
                               disabled={busy}
+                              multiline
                               placeholder="Tìm hoặc gõ tên hàng"
                               inputId={`quote-item-name-${item.key}`}
                               resultsId={`quote-item-results-${item.key}`}

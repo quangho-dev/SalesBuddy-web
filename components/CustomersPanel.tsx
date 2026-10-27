@@ -88,8 +88,82 @@ function formatWhen(value?: string) {
   });
 }
 
-function recentHistory(customer: Customer, limit = 3) {
+function recentHistory(customer: Customer, limit = 2) {
   return sortHistory(customer.interaction_history).slice(0, limit);
+}
+
+function InteractionHistorySection({
+  history,
+  newInteraction,
+  saving,
+  className,
+  onNewInteractionChange,
+  onAdd,
+  onRemove,
+}: {
+  history: CustomerInteraction[];
+  newInteraction: string;
+  saving: boolean;
+  className: string;
+  onNewInteractionChange: (value: string) => void;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <section className={className}>
+      <h3 className="text-sm font-semibold">Lịch sử tương tác</h3>
+      <ul className="mt-3 flex flex-col gap-2">
+        {history.length === 0 ? (
+          <li className="text-sm text-black/50 dark:text-white/50">
+            Chưa có lịch sử tương tác.
+          </li>
+        ) : (
+          history.map((item, index) => (
+            <li
+              key={item.id ?? `${item.content}-${index}`}
+              className="flex items-start justify-between gap-3 rounded-lg border border-black/10 px-3 py-2.5 text-sm dark:border-white/15"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-black/55 dark:text-white/55">
+                  {item.created_at ? formatWhen(item.created_at) : "Sẽ lưu khi tạo khách hàng"}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap leading-relaxed">{item.content}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemove(index)}
+                className="shrink-0 text-xs text-red-700 dark:text-red-300"
+                disabled={saving}
+              >
+                Xóa
+              </button>
+            </li>
+          ))
+        )}
+      </ul>
+      <div className="mt-3 flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-end">
+        <label className="min-w-0 flex-1 text-sm">
+          <span className="sr-only">Thêm tương tác</span>
+          <textarea
+            value={newInteraction}
+            onChange={(event) => onNewInteractionChange(event.target.value)}
+            rows={2}
+            placeholder="Ghi lại cuộc gọi, tin nhắn, lần gặp..."
+            className={inputClass}
+            disabled={saving}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={saving || newInteraction.trim().length === 0}
+          className="h-10 w-full shrink-0 rounded-lg border border-black/15 px-3 text-sm disabled:opacity-50 sm:w-auto dark:border-white/20"
+        >
+          Thêm
+        </button>
+      </div>
+    </section>
+  );
 }
 
 export function CustomersPanel() {
@@ -340,9 +414,15 @@ export function CustomersPanel() {
       const token = await withToken();
       const result = await importCustomers(token, file);
       setCustomers((current) => [...result.customers, ...current]);
+      const notes = [
+        result.duplicates
+          ? `bỏ qua ${result.duplicates} khách trùng tên công ty và mã số thuế`
+          : "",
+        result.skipped ? `bỏ qua ${result.skipped} dòng trống` : "",
+      ].filter(Boolean);
       setNotice(
         `Đã import ${result.imported} khách hàng` +
-          (result.skipped ? `, bỏ qua ${result.skipped} dòng trống` : "") +
+          (notes.length ? `, ${notes.join(", ")}` : "") +
           ".",
       );
     } catch (err) {
@@ -455,18 +535,18 @@ export function CustomersPanel() {
                     <button
                       type="button"
                       onClick={() => void openCustomer(customer.id)}
-                      className={`flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left ${
+                      className={`flex w-full flex-col items-start gap-2 rounded-lg px-3 py-3 text-left ${
                         active
                           ? "bg-black text-white dark:bg-white dark:text-black"
                           : "hover:bg-black/5 dark:hover:bg-white/10"
                       }`}
                     >
-                      <div className="min-w-0 w-[38%] shrink-0">
-                        <p className="truncate text-sm font-medium">
+                      <div className="min-w-0 w-full">
+                        <p className="whitespace-normal break-words text-sm font-medium">
                           {customerLabel(customer)}
                         </p>
                         <p
-                          className={`mt-0.5 truncate text-xs ${
+                          className={`mt-0.5 whitespace-normal break-words text-xs ${
                             active ? "opacity-80" : "text-black/55 dark:text-white/55"
                           }`}
                         >
@@ -475,7 +555,7 @@ export function CustomersPanel() {
                             : customer.phone_number || customer.address || "Chưa có thông tin liên hệ"}
                         </p>
                       </div>
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 w-full">
                         {previews.length > 0 ? (
                           <ul className="flex flex-col gap-1.5">
                             {previews.map((item, index) => (
@@ -546,24 +626,28 @@ export function CustomersPanel() {
                 </div>
                 {!creating && selectedId ? (
                   confirmDelete ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-red-700 dark:text-red-300">Xóa khách hàng này?</span>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDelete(false)}
-                        className="rounded-md border border-black/15 px-3 py-1.5 text-sm dark:border-white/20"
-                        disabled={saving}
-                      >
-                        Hủy
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void onDelete()}
-                        className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-                        disabled={saving}
-                      >
-                        Xóa
-                      </button>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="max-w-xs text-right text-xs text-red-700 dark:text-red-300">
+                        Đơn hàng và báo giá của khách này cũng sẽ bị xóa.
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(false)}
+                          className="rounded-md border border-black/15 px-3 py-1.5 text-sm dark:border-white/20"
+                          disabled={saving}
+                        >
+                          Hủy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void onDelete()}
+                          className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                          disabled={saving}
+                        >
+                          Xóa
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <button
@@ -581,6 +665,18 @@ export function CustomersPanel() {
                 <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
                   {error}
                 </p>
+              ) : null}
+
+              {!creating ? (
+                <InteractionHistorySection
+                  history={history}
+                  newInteraction={newInteraction}
+                  saving={saving}
+                  className="border-b border-black/10 pb-5 dark:border-white/10"
+                  onNewInteractionChange={setNewInteraction}
+                  onAdd={() => void addInteraction()}
+                  onRemove={(index) => void removeInteraction(index)}
+                />
               ) : null}
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -693,63 +789,17 @@ export function CustomersPanel() {
                 </button>
               </div>
 
-              <section className="border-t border-black/10 pt-5 dark:border-white/10">
-                <h3 className="text-sm font-semibold">Lịch sử tương tác</h3>
-                <ul className="mt-3 flex flex-col gap-2">
-                  {history.length === 0 ? (
-                    <li className="text-sm text-black/50 dark:text-white/50">
-                      Chưa có lịch sử tương tác.
-                    </li>
-                  ) : (
-                    history.map((item, index) => (
-                      <li
-                        key={item.id ?? `${item.content}-${index}`}
-                        className="flex items-start justify-between gap-3 rounded-lg border border-black/10 px-3 py-2.5 text-sm dark:border-white/15"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-black/55 dark:text-white/55">
-                            {item.created_at
-                              ? formatWhen(item.created_at)
-                              : "Sẽ lưu khi tạo khách hàng"}
-                          </p>
-                          <p className="mt-1 whitespace-pre-wrap leading-relaxed">
-                            {item.content}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => void removeInteraction(index)}
-                          className="shrink-0 text-xs text-red-700 dark:text-red-300"
-                          disabled={saving}
-                        >
-                          Xóa
-                        </button>
-                      </li>
-                    ))
-                  )}
-                </ul>
-                <div className="mt-3 flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-end">
-                  <label className="min-w-0 flex-1 text-sm">
-                    <span className="sr-only">Thêm tương tác</span>
-                    <textarea
-                      value={newInteraction}
-                      onChange={(event) => setNewInteraction(event.target.value)}
-                      rows={2}
-                      placeholder="Ghi lại cuộc gọi, tin nhắn, lần gặp..."
-                      className={inputClass}
-                      disabled={saving}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => void addInteraction()}
-                    disabled={saving || newInteraction.trim().length === 0}
-                    className="h-10 w-full shrink-0 rounded-lg border border-black/15 px-3 text-sm disabled:opacity-50 sm:w-auto dark:border-white/20"
-                  >
-                    Thêm
-                  </button>
-                </div>
-              </section>
+              {creating ? (
+                <InteractionHistorySection
+                  history={history}
+                  newInteraction={newInteraction}
+                  saving={saving}
+                  className="border-t border-black/10 pt-5 dark:border-white/10"
+                  onNewInteractionChange={setNewInteraction}
+                  onAdd={() => void addInteraction()}
+                  onRemove={(index) => void removeInteraction(index)}
+                />
+              ) : null}
             </form>
           )}
         </section>
