@@ -92,20 +92,61 @@ function recentHistory(customer: Customer, limit = 2) {
   return sortHistory(customer.interaction_history).slice(0, limit);
 }
 
+function todayInputValue() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function nowTimeInputValue() {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function createdAtFromDateTime(dateValue: string, timeValue: string) {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(timeValue);
+  const now = new Date();
+  if (!dateMatch) return now.toISOString();
+  const hours = timeMatch ? Number(timeMatch[1]) : now.getHours();
+  const minutes = timeMatch ? Number(timeMatch[2]) : now.getMinutes();
+  const combined = new Date(
+    Number(dateMatch[1]),
+    Number(dateMatch[2]) - 1,
+    Number(dateMatch[3]),
+    hours,
+    minutes,
+    0,
+  );
+  if (Number.isNaN(combined.getTime())) return now.toISOString();
+  return combined.toISOString();
+}
+
 function InteractionHistorySection({
   history,
   newInteraction,
+  interactionDate,
+  interactionTime,
   saving,
   className,
   onNewInteractionChange,
+  onInteractionDateChange,
+  onInteractionTimeChange,
   onAdd,
   onRemove,
 }: {
   history: CustomerInteraction[];
   newInteraction: string;
+  interactionDate: string;
+  interactionTime: string;
   saving: boolean;
   className: string;
   onNewInteractionChange: (value: string) => void;
+  onInteractionDateChange: (value: string) => void;
+  onInteractionTimeChange: (value: string) => void;
   onAdd: () => void;
   onRemove: (index: number) => void;
 }) {
@@ -141,26 +182,50 @@ function InteractionHistorySection({
           ))
         )}
       </ul>
-      <div className="mt-3 flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-end">
-        <label className="min-w-0 flex-1 text-sm">
-          <span className="sr-only">Thêm tương tác</span>
-          <textarea
-            value={newInteraction}
-            onChange={(event) => onNewInteractionChange(event.target.value)}
-            rows={2}
-            placeholder="Ghi lại cuộc gọi, tin nhắn, lần gặp..."
-            className={inputClass}
-            disabled={saving}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={onAdd}
-          disabled={saving || newInteraction.trim().length === 0}
-          className="h-10 w-full shrink-0 rounded-lg border border-black/15 px-3 text-sm disabled:opacity-50 sm:w-auto dark:border-white/20"
-        >
-          Thêm
-        </button>
+      <div className="mt-3 flex w-full min-w-0 flex-col gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <label className="flex w-full flex-col gap-1 text-sm sm:w-44">
+            Ngày
+            <input
+              type="date"
+              value={interactionDate}
+              onChange={(event) => onInteractionDateChange(event.target.value)}
+              className={inputClass}
+              disabled={saving}
+            />
+          </label>
+          <label className="flex w-full flex-col gap-1 text-sm sm:w-36">
+            Giờ
+            <input
+              type="time"
+              value={interactionTime}
+              onChange={(event) => onInteractionTimeChange(event.target.value)}
+              className={inputClass}
+              disabled={saving}
+            />
+          </label>
+        </div>
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="min-w-0 flex-1 text-sm">
+            <span className="sr-only">Thêm tương tác</span>
+            <textarea
+              value={newInteraction}
+              onChange={(event) => onNewInteractionChange(event.target.value)}
+              rows={2}
+              placeholder="Ghi lại cuộc gọi, tin nhắn, lần gặp..."
+              className={inputClass}
+              disabled={saving}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={saving || newInteraction.trim().length === 0}
+            className="h-10 w-full shrink-0 rounded-lg border border-black/15 px-3 text-sm disabled:opacity-50 sm:w-auto dark:border-white/20"
+          >
+            Thêm
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -174,6 +239,8 @@ export function CustomersPanel() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [history, setHistory] = useState<CustomerInteraction[]>([]);
   const [newInteraction, setNewInteraction] = useState("");
+  const [interactionDate, setInteractionDate] = useState(todayInputValue);
+  const [interactionTime, setInteractionTime] = useState(nowTimeInputValue);
   const [query, setQuery] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -253,6 +320,8 @@ export function CustomersPanel() {
     setForm({ ...EMPTY_FORM, payment_term_days: defaultTermRef.current });
     setHistory([]);
     setNewInteraction("");
+    setInteractionDate(todayInputValue());
+    setInteractionTime(nowTimeInputValue());
     setConfirmDelete(false);
     setError(null);
   }
@@ -262,6 +331,8 @@ export function CustomersPanel() {
     setSelectedId(customerId);
     setConfirmDelete(false);
     setNewInteraction("");
+    setInteractionDate(todayInputValue());
+    setInteractionTime(nowTimeInputValue());
     setError(null);
     const listed = customers.find((customer) => customer.id === customerId);
     if (listed) {
@@ -341,10 +412,15 @@ export function CustomersPanel() {
     const content = newInteraction.trim();
     if (!content) return;
 
-    const nextHistory = [{ content }, ...history];
+    const nextHistory = [
+      { content, created_at: createdAtFromDateTime(interactionDate, interactionTime) },
+      ...history,
+    ];
     if (creating || !selectedId) {
       setHistory(nextHistory);
       setNewInteraction("");
+      setInteractionDate(todayInputValue());
+      setInteractionTime(nowTimeInputValue());
       return;
     }
 
@@ -360,6 +436,8 @@ export function CustomersPanel() {
       );
       setHistory(sortHistory(updated.interaction_history ?? nextHistory));
       setNewInteraction("");
+      setInteractionDate(todayInputValue());
+      setInteractionTime(nowTimeInputValue());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thêm được lịch sử tương tác.");
     } finally {
@@ -671,9 +749,13 @@ export function CustomersPanel() {
                 <InteractionHistorySection
                   history={history}
                   newInteraction={newInteraction}
+                  interactionDate={interactionDate}
+                  interactionTime={interactionTime}
                   saving={saving}
                   className="border-b border-black/10 pb-5 dark:border-white/10"
                   onNewInteractionChange={setNewInteraction}
+                  onInteractionDateChange={setInteractionDate}
+                  onInteractionTimeChange={setInteractionTime}
                   onAdd={() => void addInteraction()}
                   onRemove={(index) => void removeInteraction(index)}
                 />
@@ -793,9 +875,13 @@ export function CustomersPanel() {
                 <InteractionHistorySection
                   history={history}
                   newInteraction={newInteraction}
+                  interactionDate={interactionDate}
+                  interactionTime={interactionTime}
                   saving={saving}
                   className="border-t border-black/10 pt-5 dark:border-white/10"
                   onNewInteractionChange={setNewInteraction}
+                  onInteractionDateChange={setInteractionDate}
+                  onInteractionTimeChange={setInteractionTime}
                   onAdd={() => void addInteraction()}
                   onRemove={(index) => void removeInteraction(index)}
                 />
