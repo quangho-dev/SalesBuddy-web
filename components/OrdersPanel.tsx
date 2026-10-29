@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { Banknote, Truck } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
@@ -38,6 +39,9 @@ type FormState = {
   order_date: string;
   notes: string;
   is_paid: boolean;
+  is_delivered: boolean;
+  delivery_date: string;
+  delivery_time: string;
   payment_method: "" | PaymentMethod;
   paid_amount: string;
   items: ItemForm[];
@@ -71,6 +75,37 @@ function formatDate(value?: string): string {
   return `${day}/${month}/${year}`;
 }
 
+function nowTime(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
+function deliveryParts(value?: string | null): { date: string; time: string } {
+  if (!value) return { date: "", time: "" };
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return { date: "", time: "" };
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return {
+    date: `${parsed.getFullYear()}-${month}-${day}`,
+    time: `${String(parsed.getHours()).padStart(2, "0")}:${String(parsed.getMinutes()).padStart(2, "0")}`,
+  };
+}
+
+function deliveryTimestamp(dateValue: string, timeValue: string): string | null {
+  if (!dateValue) return null;
+  const time = /^\d{2}:\d{2}$/.test(timeValue) ? timeValue : "00:00";
+  const combined = new Date(`${dateValue}T${time}:00`);
+  if (Number.isNaN(combined.getTime())) return null;
+  return combined.toISOString();
+}
+
+function formatDateTime(value?: string | null): string {
+  const parts = deliveryParts(value);
+  if (!parts.date) return "";
+  return `${formatDate(parts.date)} ${parts.time}`;
+}
+
 function newItem(overrides: Partial<ItemForm> = {}): ItemForm {
   return {
     key: crypto.randomUUID(),
@@ -91,6 +126,9 @@ function emptyForm(customerId = ""): FormState {
     order_date: todayIso(),
     notes: "",
     is_paid: false,
+    is_delivered: false,
+    delivery_date: "",
+    delivery_time: "",
     payment_method: "",
     paid_amount: "0",
     items: [newItem()],
@@ -139,11 +177,15 @@ function summarizeOrder(items: MoneyLine[]) {
 }
 
 function fromOrder(order: Order, products: Product[] = []): FormState {
+  const delivery = deliveryParts(order.delivered_at);
   return {
     customer_id: order.customer_id ?? "",
     order_date: (order.order_date ?? todayIso()).slice(0, 10),
     notes: order.notes ?? "",
     is_paid: Boolean(order.is_paid),
+    is_delivered: Boolean(order.is_delivered),
+    delivery_date: delivery.date,
+    delivery_time: delivery.time,
     payment_method: order.payment_method === "bank_transfer" ? "bank_transfer" : order.payment_method === "cash" ? "cash" : "",
     paid_amount: String(toNumber(order.paid_amount)),
     items:
@@ -184,6 +226,8 @@ function toPayload(form: FormState): OrderInput {
     order_date: form.order_date || null,
     notes: form.notes,
     is_paid: Boolean(form.is_paid),
+    is_delivered: Boolean(form.is_delivered),
+    delivered_at: deliveryTimestamp(form.delivery_date, form.delivery_time),
     payment_method: form.payment_method || null,
     paid_amount: Math.max(0, toNumber(form.paid_amount)),
     items,
@@ -378,6 +422,8 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
         customer?.phone_number ?? "",
         order.notes,
         order.is_paid ? "đã thanh toán" : "chưa thanh toán",
+        order.is_delivered ? "đã giao hàng" : "chưa giao hàng",
+        formatDateTime(order.delivered_at),
         formatDate(order.order_date),
         order.order_date,
         ...(order.items ?? []).map((item) => item.product_name),
@@ -800,7 +846,21 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                           <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                             {formatDate(order.order_date)}
                             {items.some((item) => item.vat_invoice) ? " · VAT" : ""}
-                            {order.is_paid ? " · Đã thanh toán" : " · Chưa thanh toán"}
+                            {" · "}
+                            <Banknote
+                              className="mr-0.5 inline h-4 w-4 align-[-3px]"
+                              strokeWidth={1.75}
+                              aria-hidden
+                            />
+                            {order.is_paid ? "Đã thanh toán" : "Chưa thanh toán"}
+                            {" · "}
+                            <Truck
+                              className="mr-0.5 inline h-4 w-4 align-[-3px]"
+                              strokeWidth={1.75}
+                              aria-hidden
+                            />
+                            {order.is_delivered ? "Đã giao hàng" : "Chưa giao hàng"}
+                            {order.delivered_at ? ` ${formatDateTime(order.delivered_at)}` : ""}
                             {paymentMethodLabel(order.payment_method)
                               ? ` · ${paymentMethodLabel(order.payment_method)}`
                               : ""}
@@ -992,7 +1052,58 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                     }}
                     disabled={busy}
                   />
+                  <Banknote className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden />
                   Đã thanh toán
+                </label>
+                <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={form.is_delivered}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setForm((current) => {
+                        if (!checked || current.delivery_date) {
+                          return { ...current, is_delivered: checked };
+                        }
+                        return {
+                          ...current,
+                          is_delivered: true,
+                          delivery_date: todayIso(),
+                          delivery_time: nowTime(),
+                        };
+                      });
+                    }}
+                    disabled={busy}
+                  />
+                  <Truck className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden />
+                  Đã giao hàng
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  Ngày giao hàng
+                  <input
+                    type="date"
+                    value={form.delivery_date}
+                    onChange={(event) => {
+                      const date = event.target.value;
+                      setForm((current) => ({
+                        ...current,
+                        delivery_date: date,
+                        delivery_time: date ? current.delivery_time || nowTime() : "",
+                      }));
+                    }}
+                    className={inputClass}
+                    disabled={busy}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  Giờ giao hàng
+                  <input
+                    type="time"
+                    value={form.delivery_time}
+                    onChange={(event) => updateField("delivery_time", event.target.value)}
+                    className={inputClass}
+                    disabled={busy}
+                  />
                 </label>
                 {form.is_paid ? (
                   <>

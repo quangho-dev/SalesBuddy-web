@@ -90,6 +90,8 @@ export type Order = {
   order_date: string;
   notes: string;
   is_paid: boolean;
+  is_delivered: boolean;
+  delivered_at?: string | null;
   payment_method: PaymentMethod | null;
   paid_amount: number | string;
   quote_id?: string | null;
@@ -116,6 +118,8 @@ export type OrderInput = {
   order_date?: string | null;
   notes: string;
   is_paid: boolean;
+  is_delivered: boolean;
+  delivered_at?: string | null;
   payment_method: PaymentMethod | null;
   paid_amount: number;
   items: OrderItemInput[];

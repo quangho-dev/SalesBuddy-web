@@ -426,12 +426,16 @@ export function ProductsPanel() {
                           </span>
                         ) : null}
                         <span className="font-bold">{formatPrice(product.selling_price)}đ</span>
-                        <span>
-                          {" · tồn "}
-                          <span className="font-bold">
-                            {formatPrice(product.stock)}
-                            {product.unit.trim() ? ` ${product.unit.trim()}` : ""}
-                          </span>
+                      </p>
+                      <p
+                        className={`mt-0.5 text-xs ${
+                          active ? "opacity-80" : "text-black/55 dark:text-white/55"
+                        }`}
+                      >
+                        Tồn kho:{" "}
+                        <span className="font-bold">
+                          {formatPrice(product.stock)}
+                          {product.unit.trim() ? ` ${product.unit.trim()}` : ""}
                         </span>
                       </p>
                     </button>
