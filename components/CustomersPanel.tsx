@@ -40,16 +40,20 @@ function customerLabel(customer: Pick<Customer, "company_name" | "contact_person
   return customer.company_name.trim() || customer.contact_person.trim() || "Khách hàng chưa đặt tên";
 }
 
+function interactionTimestamp(value?: string) {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+}
+
 function sortHistory(items: CustomerInteraction[] | undefined | null) {
-  return [...(items ?? [])].sort((left, right) => {
-    const leftTime = left.created_at
-      ? Date.parse(left.created_at) || 0
-      : Number.POSITIVE_INFINITY;
-    const rightTime = right.created_at
-      ? Date.parse(right.created_at) || 0
-      : Number.POSITIVE_INFINITY;
-    return rightTime - leftTime;
-  });
+  return [...(items ?? [])].sort(
+    (left, right) => interactionTimestamp(right.created_at) - interactionTimestamp(left.created_at),
+  );
+}
+
+function latestInteractionTime(customer: Customer) {
+  return interactionTimestamp(sortHistory(customer.interaction_history)[0]?.created_at);
 }
 
 function fromCustomer(customer: Customer): FormState {
@@ -254,20 +258,26 @@ export function CustomersPanel() {
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return customers;
-    return customers.filter((customer) =>
-      [
-        customer.company_name,
-        customer.contact_person,
-        customer.phone_number,
-        customer.tax_code,
-        customer.address,
-        customer.zalo,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle),
-    );
+    const rows = needle
+      ? customers.filter((customer) =>
+          [
+            customer.company_name,
+            customer.contact_person,
+            customer.phone_number,
+            customer.tax_code,
+            customer.address,
+            customer.zalo,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(needle),
+        )
+      : customers;
+    return [...rows].sort((left, right) => {
+      const byInteraction = latestInteractionTime(right) - latestInteractionTime(left);
+      if (byInteraction !== 0) return byInteraction;
+      return interactionTimestamp(right.created_at) - interactionTimestamp(left.created_at);
+    });
   }, [customers, query]);
 
   const withToken = useCallback(async () => {
@@ -593,7 +603,7 @@ export function CustomersPanel() {
               className={inputClass}
             />
           </div>
-          <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+          <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
             {loadingList ? (
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 Đang tải...
@@ -613,13 +623,13 @@ export function CustomersPanel() {
                     <button
                       type="button"
                       onClick={() => void openCustomer(customer.id)}
-                      className={`flex w-full flex-col items-start gap-2 rounded-lg px-3 py-3 text-left ${
+                      className={`flex w-full flex-col overflow-hidden rounded-lg border text-left ${
                         active
-                          ? "bg-black text-white dark:bg-white dark:text-black"
-                          : "hover:bg-black/5 dark:hover:bg-white/10"
+                          ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                          : "border-black/10 bg-white hover:border-black/25 dark:border-white/15 dark:bg-transparent dark:hover:border-white/30"
                       }`}
                     >
-                      <div className="min-w-0 w-full">
+                      <div className="min-w-0 w-full px-3 py-2.5">
                         <p className="whitespace-normal break-words text-sm font-medium">
                           {customerLabel(customer)}
                         </p>
@@ -633,7 +643,20 @@ export function CustomersPanel() {
                             : customer.phone_number || customer.address || "Chưa có thông tin liên hệ"}
                         </p>
                       </div>
-                      <div className="min-w-0 w-full">
+                      <div
+                        className={`min-w-0 w-full border-t px-3 py-2.5 ${
+                          active
+                            ? "border-white/20 bg-white/10 dark:border-black/10 dark:bg-black/5"
+                            : "border-black/10 bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.04]"
+                        }`}
+                      >
+                        <p
+                          className={`mb-1.5 text-[11px] font-medium tracking-wide uppercase ${
+                            active ? "opacity-70" : "text-black/45 dark:text-white/45"
+                          }`}
+                        >
+                          Tương tác gần đây
+                        </p>
                         {previews.length > 0 ? (
                           <ul className="flex flex-col gap-1.5">
                             {previews.map((item, index) => (
@@ -641,8 +664,8 @@ export function CustomersPanel() {
                                 key={item.id ?? `${item.content}-${index}`}
                                 className={`rounded-md px-2 py-1.5 ${
                                   active
-                                    ? "bg-white/15"
-                                    : "bg-black/[0.04] dark:bg-white/[0.06]"
+                                    ? "bg-white/15 dark:bg-black/10"
+                                    : "bg-white dark:bg-black/20"
                                 }`}
                               >
                                 <p

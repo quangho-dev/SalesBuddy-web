@@ -3,15 +3,30 @@
 import { Show, SignInButton, SignUpButton } from "@clerk/nextjs";
 import { AppSidebar } from "@/components/AppSidebar";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const SIDEBAR_COLLAPSED_KEY = "sales-buddy-sidebar-collapsed";
 
 function SignedInShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-1">
       <div className="hidden h-full md:block">
-        <AppSidebar />
+        <AppSidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
       </div>
 
       {mobileOpen ? (
