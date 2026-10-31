@@ -232,18 +232,94 @@ async function apiJson<T>(
   return (await response.json()) as T;
 }
 
+export type GoogleSheetsStatus = {
+  connected: boolean;
+  reason?: string | null;
+};
+
+export async function getGoogleSheetsStatus(
+  token: string,
+): Promise<GoogleSheetsStatus> {
+  return apiJson<GoogleSheetsStatus>("/api/google/sheets/status", token);
+}
+
+export async function connectGoogleSheets(token: string): Promise<string> {
+  const payload = await apiJson<{ url: string }>("/api/google/sheets/connect", token, {
+    method: "POST",
+  });
+  return payload.url;
+}
+
+export type ChatStreamEvent = {
+  type: "status" | "delta" | "done" | "error";
+  text?: string;
+};
+
 export async function sendChatMessage(
   prompt: string,
   token: string,
   threadId: string,
+  onEvent: (event: ChatStreamEvent) => void,
 ): Promise<string> {
-  const payload = await apiJson<{ response: string }>("/api/chat/", token, {
+  const response = await fetch(`${API_URL}/api/chat/`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({ prompt, thread_id: threadId }),
     signal: AbortSignal.timeout(300_000),
   });
-  const reply = payload.response;
-  return typeof reply === "string" ? reply : JSON.stringify(reply);
+
+  if (!response.ok) {
+    let detail = `Request failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) detail = payload.detail;
+    } catch {
+      // keep default message
+    }
+    throw new Error(detail);
+  }
+
+  if (!response.body) {
+    throw new Error("Máy chủ không trả lời theo luồng.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let reply = "";
+
+  const handleBlock = (block: string) => {
+    const data = block
+      .split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n");
+    if (!data) return;
+    const event = JSON.parse(data) as ChatStreamEvent;
+    if (event.type === "error") {
+      throw new Error(event.text || "Không gửi được tin nhắn.");
+    }
+    if (event.type === "delta" && event.text) {
+      reply += event.text;
+    }
+    if (event.type !== "done") onEvent(event);
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() ?? "";
+    for (const block of blocks) handleBlock(block);
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) handleBlock(buffer);
+  return reply;
 }
 
 export async function getSettings(token: string): Promise<AppSettings> {

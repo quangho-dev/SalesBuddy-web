@@ -32,7 +32,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   {
     href: "/chat",
-    label: "Chat",
+    label: "Trợ lý Sales",
     icon: MessageSquare,
     match: (pathname) => pathname === "/chat",
   },
