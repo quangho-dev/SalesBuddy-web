@@ -250,9 +250,41 @@ export async function connectGoogleSheets(token: string): Promise<string> {
   return payload.url;
 }
 
+export type ChatHistoryMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
+export type ChatThread = {
+  id: string;
+  title: string;
+  updated_at: string;
+};
+
+export async function listChatThreads(token: string): Promise<ChatThread[]> {
+  const payload = await apiJson<{ threads: ChatThread[] }>("/api/chat/threads", token);
+  return payload.threads ?? [];
+}
+
+export async function listChatMessages(
+  token: string,
+  threadId: string,
+): Promise<ChatHistoryMessage[]> {
+  const payload = await apiJson<{ messages: ChatHistoryMessage[] }>(
+    `/api/chat/threads/${threadId}/messages`,
+    token,
+  );
+  return payload.messages ?? [];
+}
+
 export type ChatStreamEvent = {
-  type: "status" | "delta" | "done" | "error";
+  type: "status" | "delta" | "done" | "error" | "thread";
   text?: string;
+  id?: string;
+  title?: string;
+  updated_at?: string;
 };
 
 export async function sendChatMessage(
