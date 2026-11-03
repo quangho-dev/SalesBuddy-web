@@ -3,6 +3,7 @@
 import { UserButton } from "@clerk/nextjs";
 import {
   CreditCard,
+  Files,
   FileText,
   MessageSquare,
   Package,
@@ -65,6 +66,12 @@ const navItems: NavItem[] = [
     label: "Công nợ",
     icon: CreditCard,
     match: (pathname) => pathname.startsWith("/debts"),
+  },
+  {
+    href: "/documents",
+    label: "Tài liệu",
+    icon: Files,
+    match: (pathname) => pathname.startsWith("/documents"),
   },
   {
     href: "/settings",

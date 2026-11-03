@@ -190,6 +190,22 @@ export type AppSettings = {
   default_payment_term_days: number;
 };
 
+export type RagStrategy =
+  | "basic"
+  | "hybrid"
+  | "multi-query-vector"
+  | "multi-query-hybrid";
+
+export type RagSettings = {
+  rag_strategy: RagStrategy;
+  final_context_size: number;
+  similarity_threshold: number;
+  chunks_per_search: number;
+  vector_weight: number;
+  keyword_weight: number;
+  number_of_queries: number;
+};
+
 export type CustomerInput = {
   company_name: string;
   contact_person: string;
@@ -250,10 +266,17 @@ export async function connectGoogleSheets(token: string): Promise<string> {
   return payload.url;
 }
 
+export type DocumentCitation = {
+  filename: string;
+  page?: number | string | null;
+  excerpt: string;
+};
+
 export type ChatHistoryMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  citations?: DocumentCitation[] | null;
   created_at: string;
 };
 
@@ -280,11 +303,12 @@ export async function listChatMessages(
 }
 
 export type ChatStreamEvent = {
-  type: "status" | "delta" | "done" | "error" | "thread";
+  type: "status" | "delta" | "done" | "error" | "thread" | "citations";
   text?: string;
   id?: string;
   title?: string;
   updated_at?: string;
+  items?: DocumentCitation[];
 };
 
 export async function sendChatMessage(
@@ -292,6 +316,7 @@ export async function sendChatMessage(
   token: string,
   threadId: string,
   onEvent: (event: ChatStreamEvent) => void,
+  documentIds: string[] = [],
 ): Promise<string> {
   const response = await fetch(`${API_URL}/api/chat/`, {
     method: "POST",
@@ -300,7 +325,11 @@ export async function sendChatMessage(
       Accept: "text/event-stream",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ prompt, thread_id: threadId }),
+    body: JSON.stringify({
+      prompt,
+      thread_id: threadId,
+      document_ids: documentIds,
+    }),
     signal: AbortSignal.timeout(300_000),
   });
 
@@ -363,6 +392,20 @@ export async function updateSettings(
   payload: AppSettings,
 ): Promise<AppSettings> {
   return apiJson<AppSettings>("/api/settings/", token, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getRagSettings(token: string): Promise<RagSettings> {
+  return apiJson<RagSettings>("/api/settings/rag", token);
+}
+
+export async function updateRagSettings(
+  token: string,
+  payload: RagSettings,
+): Promise<RagSettings> {
+  return apiJson<RagSettings>("/api/settings/rag", token, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
@@ -768,5 +811,69 @@ export async function generateQuoteFile(
     method: "POST",
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(300_000),
+  });
+}
+
+export type SalesDocument = {
+  id: string;
+  filename: string;
+  content_type: string;
+  byte_size: number;
+  status: string;
+  source_type: string;
+  processing_status: string | null;
+  error: string | null;
+  chunk_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function listDocuments(token: string): Promise<SalesDocument[]> {
+  const payload = await apiJson<{ documents: SalesDocument[] }>(
+    "/api/documents",
+    token,
+  );
+  return payload.documents;
+}
+
+export async function uploadDocument(
+  token: string,
+  file: File,
+): Promise<SalesDocument> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch(`${API_URL}/api/documents`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body,
+  });
+  if (!response.ok) {
+    let detail = `Request failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) detail = payload.detail;
+    } catch {
+      // keep default message
+    }
+    throw new Error(detail);
+  }
+  return (await response.json()) as SalesDocument;
+}
+
+export async function embedDocument(
+  token: string,
+  documentId: string,
+): Promise<SalesDocument> {
+  return apiJson<SalesDocument>(`/api/documents/${documentId}/embed`, token, {
+    method: "POST",
+  });
+}
+
+export async function deleteDocument(
+  token: string,
+  documentId: string,
+): Promise<{ deleted: boolean }> {
+  return apiJson<{ deleted: boolean }>(`/api/documents/${documentId}`, token, {
+    method: "DELETE",
   });
 }

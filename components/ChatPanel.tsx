@@ -1,14 +1,19 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { ChevronRight, Files } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
 import {
   ChatThread,
+  DocumentCitation,
+  SalesDocument,
   connectGoogleSheets,
   getGoogleSheetsStatus,
   listChatMessages,
   listChatThreads,
+  listDocuments,
   sendChatMessage,
 } from "@/lib/api";
 
@@ -20,7 +25,66 @@ type ChatMessage = {
   content: string;
   pending?: boolean;
   status?: string;
+  citations?: DocumentCitation[];
 };
+
+function citationsFrom(value: unknown): DocumentCitation[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as DocumentCitation;
+    const excerpt = String(row.excerpt || "").trim();
+    const filename = String(row.filename || "").trim();
+    if (!excerpt || !filename) return [];
+    return [{ filename, excerpt, page: row.page }];
+  });
+}
+
+function citationTitle(item: DocumentCitation) {
+  if (item.page != null && item.page !== "") {
+    return `${item.filename} · trang ${item.page}`;
+  }
+  return item.filename;
+}
+
+function CitationList({ items }: { items: DocumentCitation[] }) {
+  const [open, setOpen] = useState<Record<number, boolean>>({});
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-3 border-t border-black/10 pt-3 dark:border-white/15">
+      <p className="text-xs font-medium text-black/55 dark:text-white/55">Trích dẫn</p>
+      <ul className="mt-2 flex flex-col gap-1">
+        {items.map((item, index) => {
+          const expanded = Boolean(open[index]);
+          return (
+            <li key={`${item.filename}-${item.page ?? "x"}-${index}`}>
+              <button
+                type="button"
+                aria-expanded={expanded}
+                onClick={() =>
+                  setOpen((current) => ({ ...current, [index]: !current[index] }))
+                }
+                className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-black/5 dark:hover:bg-white/10"
+              >
+                <ChevronRight
+                  className={`h-3.5 w-3.5 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
+                <span className="min-w-0 truncate">{citationTitle(item)}</span>
+              </button>
+              {expanded ? (
+                <p className="whitespace-pre-wrap px-7 pb-2 text-sm text-black/80 dark:text-white/80">
+                  {item.excerpt}
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 function nextId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -41,6 +105,126 @@ function formatThreadTime(value: string) {
   if (Number.isNaN(date.getTime())) return "";
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function documentStatusLabel(status: string) {
+  if (status === "ready") return "Sẵn sàng";
+  if (status === "failed") return "Lỗi";
+  return "Đang embed";
+}
+
+function DocumentPicker({
+  documents,
+  selectedIds,
+  open,
+  disabled,
+  onToggleOpen,
+  onToggleDocument,
+  onClear,
+}: {
+  documents: SalesDocument[];
+  selectedIds: string[];
+  open: boolean;
+  disabled: boolean;
+  onToggleOpen: () => void;
+  onToggleDocument: (documentId: string) => void;
+  onClear: () => void;
+}) {
+  const readyCount = documents.filter((document) => document.status === "ready").length;
+  const selected = documents.filter((document) => selectedIds.includes(document.id));
+  const label =
+    selected.length === 0 ? "Tất cả tài liệu" : `${selected.length} tài liệu`;
+
+  return (
+    <div className="relative">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggleOpen}
+          disabled={disabled}
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-black/15 px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20"
+        >
+          <Files className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          {label}
+        </button>
+        {selected.length > 0 ? (
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={disabled}
+            className="h-9 rounded-lg px-2 text-sm text-black/60 disabled:cursor-not-allowed disabled:opacity-50 dark:text-white/60"
+          >
+            Bỏ chọn
+          </button>
+        ) : null}
+      </div>
+      {selected.length > 0 ? (
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {selected.map((document) => (
+            <li key={document.id}>
+              <button
+                type="button"
+                onClick={() => onToggleDocument(document.id)}
+                disabled={disabled}
+                className="max-w-full truncate rounded-full border border-black/15 px-2.5 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/20"
+                title="Bỏ tài liệu này"
+              >
+                {document.filename}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-xs text-black/45 dark:text-white/45">
+          Chưa chọn thì câu hỏi tìm trong mọi tài liệu đã sẵn sàng.
+        </p>
+      )}
+      {open ? (
+        <div className="absolute bottom-full left-0 z-10 mb-2 w-full max-w-md rounded-xl border border-black/10 bg-white p-3 shadow-lg dark:border-white/15 dark:bg-black">
+          <p className="text-sm font-medium">Chọn tài liệu để hỏi</p>
+          {documents.length === 0 ? (
+            <p className="mt-2 text-sm text-black/60 dark:text-white/60">
+              Chưa có tài liệu.{" "}
+              <Link href="/documents" className="underline">
+                Tải tài liệu
+              </Link>
+            </p>
+          ) : (
+            <ul className="mt-2 max-h-56 overflow-y-auto">
+              {documents.map((document) => {
+                const ready = document.status === "ready";
+                return (
+                  <li key={document.id}>
+                    <label
+                      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
+                        ready ? "hover:bg-black/5 dark:hover:bg-white/10" : "opacity-50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(document.id)}
+                        disabled={!ready || disabled}
+                        onChange={() => onToggleDocument(document.id)}
+                      />
+                      <span className="min-w-0 flex-1 truncate">{document.filename}</span>
+                      {ready ? null : (
+                        <span className="shrink-0 text-xs">{documentStatusLabel(document.status)}</span>
+                      )}
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {documents.length > 0 && readyCount === 0 ? (
+            <p className="mt-2 text-xs text-black/50 dark:text-white/50">
+              Chưa có tài liệu nào embed xong.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function ThreadList({
@@ -124,6 +308,10 @@ export function ChatPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [sheetsConnected, setSheetsConnected] = useState<boolean | null>(null);
   const [historyReady, setHistoryReady] = useState(false);
+  const [documents, setDocuments] = useState<SalesDocument[]>([]);
+  const [documentsLoaded, setDocumentsLoaded] = useState(false);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeThreadRef = useRef<string | null>(null);
 
@@ -185,6 +373,7 @@ export function ChatPanel() {
             id: message.id,
             role: message.role,
             content: message.content,
+            citations: citationsFrom(message.citations),
           }));
         });
       } catch {
@@ -196,12 +385,34 @@ export function ChatPanel() {
       }
     }
 
+    async function loadDocuments() {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const rows = await listDocuments(token);
+        if (!cancelled) setDocuments(rows);
+      } catch {
+        if (!cancelled) setDocuments([]);
+      } finally {
+        if (!cancelled) setDocumentsLoaded(true);
+      }
+    }
+
     void loadSheetsStatus();
     void loadHistory();
+    void loadDocuments();
     return () => {
       cancelled = true;
     };
   }, [getToken]);
+
+  useEffect(() => {
+    if (!documentsLoaded) return;
+    const readyIds = new Set(
+      documents.filter((document) => document.status === "ready").map((document) => document.id),
+    );
+    setSelectedDocumentIds((current) => current.filter((id) => readyIds.has(id)));
+  }, [documents, documentsLoaded]);
 
   async function openThread(threadId: string) {
     if (loading || threadId === activeThreadId) {
@@ -223,6 +434,7 @@ export function ChatPanel() {
           id: message.id,
           role: message.role,
           content: message.content,
+          citations: citationsFrom(message.citations),
         })),
       );
     } catch (err) {
@@ -264,6 +476,7 @@ export function ChatPanel() {
     let reply = "";
     setInput("");
     setError(null);
+    setPickerOpen(false);
     setLoading(true);
     setMessages((current) => [
       ...current,
@@ -282,34 +495,49 @@ export function ChatPanel() {
       if (!token) {
         throw new Error("Không lấy được phiên đăng nhập. Hãy đăng nhập lại.");
       }
-      await sendChatMessage(trimmed, token, startedThreadId ?? "", (event) => {
-        if (event.type === "thread" && event.id && event.title && event.updated_at) {
-          if (!startedThreadId) createdThreadId = event.id;
-          rememberThread({
-            id: event.id,
-            title: event.title,
-            updated_at: event.updated_at,
-          });
-          return;
-        }
-        if (event.type === "status" && event.text) {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId ? { ...message, status: event.text } : message,
-            ),
-          );
-          return;
-        }
-        if (event.type === "delta" && event.text) {
-          reply += event.text;
-          const nextReply = reply;
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantId ? { ...message, content: nextReply } : message,
-            ),
-          );
-        }
-      });
+      await sendChatMessage(
+        trimmed,
+        token,
+        startedThreadId ?? "",
+        (event) => {
+          if (event.type === "thread" && event.id && event.title && event.updated_at) {
+            if (!startedThreadId) createdThreadId = event.id;
+            rememberThread({
+              id: event.id,
+              title: event.title,
+              updated_at: event.updated_at,
+            });
+            return;
+          }
+          if (event.type === "status" && event.text) {
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId ? { ...message, status: event.text } : message,
+              ),
+            );
+            return;
+          }
+          if (event.type === "citations") {
+            const items = citationsFrom(event.items);
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId ? { ...message, citations: items } : message,
+              ),
+            );
+            return;
+          }
+          if (event.type === "delta" && event.text) {
+            reply += event.text;
+            const nextReply = reply;
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === assistantId ? { ...message, content: nextReply } : message,
+              ),
+            );
+          }
+        },
+        selectedDocumentIds,
+      );
       if (sheetsLoginNeeded(reply)) setSheetsConnected(false);
       setMessages((current) =>
         current.map((message) =>
@@ -389,7 +617,7 @@ export function ChatPanel() {
             <div>
               <h1 className="text-lg font-semibold tracking-tight">Trợ lý Sales</h1>
               <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-                Hỏi về dữ liệu bán hàng trong database hoặc về Google Sheets.
+                Hỏi về dữ liệu bán hàng trong database, tài liệu đã tải, hoặc Google Sheets.
               </p>
             </div>
             <button
@@ -425,10 +653,10 @@ export function ChatPanel() {
               <p>
                 {activeThreadId
                   ? "Cuộc trò chuyện này chưa có tin nhắn."
-                  : "Hỏi về database bán hàng hoặc về Google Sheets."}
+                  : "Hỏi về database bán hàng, tài liệu đã tải, hoặc Google Sheets."}
               </p>
               <p className="mt-2">
-                Ví dụ: “Khách nào còn công nợ?” hoặc “Tìm giá inox trong bảng tính”.
+                Ví dụ: “Khách nào còn công nợ?”, “Giá trong tài liệu đã tải là bao nhiêu?” hoặc “Tìm giá inox trong bảng tính”.
               </p>
             </div>
           ) : (
@@ -443,13 +671,16 @@ export function ChatPanel() {
                   }
                 >
                   {message.role === "assistant" ? (
-                    message.content ? (
-                      <ChatMarkdown content={message.content} />
-                    ) : (
-                      <p className="text-black/50 dark:text-white/50">
-                        {message.status || "Đang xử lý..."}
-                      </p>
-                    )
+                    <>
+                      {message.content ? (
+                        <ChatMarkdown content={message.content} />
+                      ) : (
+                        <p className="text-black/50 dark:text-white/50">
+                          {message.status || "Đang xử lý..."}
+                        </p>
+                      )}
+                      <CitationList items={message.citations ?? []} />
+                    </>
                   ) : (
                     <p className="whitespace-pre-wrap break-words">{message.content}</p>
                   )}
@@ -475,6 +706,21 @@ export function ChatPanel() {
                 {error}
               </p>
             ) : null}
+            <DocumentPicker
+              documents={documents}
+              selectedIds={selectedDocumentIds}
+              open={pickerOpen}
+              disabled={loading || !historyReady}
+              onToggleOpen={() => setPickerOpen((current) => !current)}
+              onToggleDocument={(documentId) =>
+                setSelectedDocumentIds((current) =>
+                  current.includes(documentId)
+                    ? current.filter((id) => id !== documentId)
+                    : [...current, documentId],
+                )
+              }
+              onClear={() => setSelectedDocumentIds([])}
+            />
             <label htmlFor="chat-input" className="sr-only">
               Tin nhắn
             </label>
