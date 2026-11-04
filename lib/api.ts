@@ -50,6 +50,7 @@ export type ProductInput = {
 
 export type ProductImportResult = {
   imported: number;
+  updated?: number;
   skipped: number;
   duplicates?: number;
   errors: { row: number; message: string }[];

@@ -261,11 +261,17 @@ export function ProductsPanel() {
     try {
       const token = await withToken();
       const result = await importProducts(token, file);
-      setProducts((current) => [...result.products, ...current]);
+      setProducts((current) => {
+        const incomingIds = new Set(result.products.map((product) => product.id));
+        return [
+          ...result.products,
+          ...current.filter((product) => !incomingIds.has(product.id)),
+        ];
+      });
       const errorCount = result.errors.length;
       const notes = [
-        result.duplicates
-          ? `bỏ qua ${result.duplicates} sản phẩm trùng mã và tên`
+        result.updated
+          ? `cập nhật ${result.updated} sản phẩm trùng mã`
           : "",
         result.skipped ? `bỏ qua ${result.skipped} dòng trống` : "",
         errorCount ? `${errorCount} dòng lỗi` : "",
