@@ -154,6 +154,15 @@ export type QuoteItem = {
   notes: string;
 };
 
+export type QuoteStatusEvent = {
+  id: string;
+  previous_quote_status?: string;
+  quote_status?: string;
+  reason?: string;
+  order_id?: string | null;
+  created_at?: string;
+};
+
 export type Quote = {
   id: string;
   clerk_id: string;
@@ -165,6 +174,10 @@ export type Quote = {
   drive_file_id?: string;
   drive_file_name?: string;
   drive_web_link?: string;
+  status?: "converted" | "failed" | "unset";
+  conversion_error?: string;
+  order_id?: string | null;
+  status_events?: QuoteStatusEvent[];
   created_at: string;
   updated_at: string;
   customers?: OrderCustomer | null;
@@ -764,6 +777,18 @@ export async function deleteQuote(
     token,
     { method: "DELETE" },
   );
+}
+
+export async function setQuoteStatus(
+  token: string,
+  quoteId: string,
+  status: "converted" | "failed" | "unset",
+  reason = "",
+): Promise<Quote> {
+  return apiJson<Quote>(`/api/quotes/${quoteId}/status`, token, {
+    method: "POST",
+    body: JSON.stringify({ status, reason }),
+  });
 }
 
 export async function convertQuoteToOrder(

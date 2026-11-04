@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Banknote, Truck } from "lucide-react";
+import { Banknote, CircleCheck, Truck } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
@@ -139,6 +139,12 @@ function paymentMethodLabel(method?: string | null) {
   if (method === "cash") return "Tiền mặt";
   if (method === "bank_transfer") return "Chuyển khoản";
   return "";
+}
+
+function orderQuoteHref(quoteId?: string | null) {
+  const id = quoteId?.trim();
+  if (!id) return "";
+  return `/quotes?id=${encodeURIComponent(id)}`;
 }
 
 function orderDriveLink(order?: Order | null) {
@@ -827,6 +833,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                 const customer = orderCustomer(order, customers);
                 const items = order.items ?? [];
                 const fileLink = orderDriveLink(order);
+                const quoteHref = orderQuoteHref(order.quote_id);
                 return (
                   <li key={order.id}>
                     <div
@@ -883,18 +890,31 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                           </p>
                         ) : null}
                       </button>
-                      {fileLink ? (
-                        <a
-                          href={fileLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(event) => event.stopPropagation()}
-                          className={`mx-3 mb-3 inline-flex text-xs font-medium underline ${
-                            active ? "opacity-90" : "text-black/70 dark:text-white/70"
-                          }`}
-                        >
-                          Xem file Drive
-                        </a>
+                      {quoteHref || fileLink ? (
+                        <div className="mx-3 mb-3 flex flex-wrap gap-x-3 gap-y-1">
+                          {quoteHref ? (
+                            <Link
+                              href={quoteHref}
+                              className={`inline-flex text-xs font-medium underline ${
+                                active ? "opacity-90" : "text-emerald-800 dark:text-emerald-200"
+                              }`}
+                            >
+                              Xem báo giá
+                            </Link>
+                          ) : null}
+                          {fileLink ? (
+                            <a
+                              href={fileLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`inline-flex text-xs font-medium underline ${
+                                active ? "opacity-90" : "text-black/70 dark:text-white/70"
+                              }`}
+                            >
+                              Xem file Drive
+                            </a>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   </li>
@@ -928,7 +948,17 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                   >
                     Danh sách
                   </button>
-                  <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-base font-semibold tracking-tight">{title}</h2>
+                    {!creating && orderQuoteHref(selected?.quote_id) ? (
+                      <Link
+                        href={orderQuoteHref(selected?.quote_id)}
+                        className="mt-1 inline-flex text-xs font-medium text-emerald-700 underline dark:text-emerald-300"
+                      >
+                        Xem báo giá
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {driveLink ? (

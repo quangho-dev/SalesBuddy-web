@@ -2,10 +2,10 @@
 
 import { UserButton } from "@clerk/nextjs";
 import {
+  Bot,
   CreditCard,
   Files,
   FileText,
-  MessageSquare,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
@@ -34,7 +34,7 @@ const navItems: NavItem[] = [
   {
     href: "/chat",
     label: "Trợ lý Sales",
-    icon: MessageSquare,
+    icon: Bot,
     match: (pathname) => pathname === "/chat",
   },
   {

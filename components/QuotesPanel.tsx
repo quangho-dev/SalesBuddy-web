@@ -2,6 +2,8 @@
 
 import { CustomerPicker, customerLabel } from "@/components/CustomerPicker";
 import { useAuth } from "@clerk/nextjs";
+import { Circle, CircleCheck, CircleX } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
@@ -14,6 +16,7 @@ import {
   listCustomers,
   listProducts,
   listQuotes,
+  setQuoteStatus,
   updateQuote,
   type Customer,
   type GeneratedQuoteFile,
@@ -111,6 +114,101 @@ function summarizeQuote(items: MoneyLine[]) {
   const subtotal = items.reduce((sum, item) => sum + lineTotal(item), 0);
   const vat = items.reduce((sum, item) => sum + lineVat(item), 0);
   return { subtotal, vat, grand: subtotal + vat };
+}
+
+type QuoteStatus = "converted" | "failed" | "unset";
+
+const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
+  converted: "Đã chuyển thành đơn hàng",
+  failed: "Thất bại",
+  unset: "Chưa xác định",
+};
+
+function quoteStatus(value?: string): QuoteStatus {
+  if (value === "converted" || value === "failed") return value;
+  return "unset";
+}
+
+function quoteOrderHref(orderId?: string | null) {
+  const id = orderId?.trim();
+  if (!id) return "";
+  return `/orders?id=${encodeURIComponent(id)}`;
+}
+
+function QuoteStatusLine({
+  status,
+  reason = "",
+  orderId = "",
+  active = false,
+}: {
+  status?: string;
+  reason?: string;
+  orderId?: string | null;
+  active?: boolean;
+}) {
+  const current = quoteStatus(status);
+  const orderHref = current === "converted" ? quoteOrderHref(orderId) : "";
+  const Icon = current === "converted" ? CircleCheck : current === "failed" ? CircleX : Circle;
+  const tone = active
+    ? "opacity-80"
+    : current === "converted"
+      ? "text-emerald-700 dark:text-emerald-300"
+      : current === "failed"
+        ? "text-red-700 dark:text-red-300"
+        : "text-black/55 dark:text-white/55";
+  return (
+    <div className={`mt-1 ${tone}`}>
+      <p className="flex items-center gap-1 text-xs font-medium">
+        <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+        {QUOTE_STATUS_LABEL[current]}
+      </p>
+      {orderHref ? (
+        <Link
+          href={orderHref}
+          onClick={(event) => event.stopPropagation()}
+          className={`mt-0.5 inline-flex text-xs font-medium underline ${
+            active ? "opacity-90" : ""
+          }`}
+        >
+          Xem đơn hàng
+        </Link>
+      ) : null}
+      {current === "failed" && reason ? (
+        <p className="mt-0.5 truncate text-xs">{reason}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function QuoteStatusHistory({ events }: { events?: Quote["status_events"] }) {
+  const rows = events ?? [];
+  return (
+    <div className="flex flex-col gap-2 border-t border-black/10 pt-3 dark:border-white/10">
+      <p className="text-sm font-medium">Lịch sử trạng thái</p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-black/55 dark:text-white/55">Chưa có lần đổi trạng thái.</p>
+      ) : (
+        <ul className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+          {rows.map((event) => (
+            <li key={event.id} className="text-sm">
+              <p>
+                <span className="text-black/55 dark:text-white/55">
+                  {formatWhen(event.created_at)}
+                </span>
+                {" · "}
+                {QUOTE_STATUS_LABEL[quoteStatus(event.previous_quote_status)]}
+                {" → "}
+                {QUOTE_STATUS_LABEL[quoteStatus(event.quote_status)]}
+              </p>
+              {quoteStatus(event.quote_status) === "failed" && event.reason?.trim() ? (
+                <p className="mt-0.5 text-xs text-red-700 dark:text-red-300">{event.reason}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function quoteLabel(quote: Quote) {
@@ -315,9 +413,10 @@ function ProductSearch({
   );
 }
 
-export function QuotesPanel() {
+export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}) {
   const router = useRouter();
   const { getToken } = useAuth();
+  const openedInitialId = useRef<string | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -326,12 +425,16 @@ export function QuotesPanel() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [query, setQuery] = useState("");
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS);
+  const [statusFilter, setStatusFilter] = useState<"" | QuoteStatus>("");
   const [catalogQuery, setCatalogQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [failureOpen, setFailureOpen] = useState(false);
+  const [failureReason, setFailureReason] = useState("");
   const [generatedFile, setGeneratedFile] = useState<GeneratedQuoteFile | null>(
     null,
   );
@@ -344,6 +447,9 @@ export function QuotesPanel() {
     let rows = quotes;
     if (customerFilter) {
       rows = rows.filter((quote) => quote.customer_id === customerFilter);
+    }
+    if (statusFilter) {
+      rows = rows.filter((quote) => quoteStatus(quote.status) === statusFilter);
     }
     const needle = query.trim().toLowerCase();
     if (!needle) return rows;
@@ -360,7 +466,7 @@ export function QuotesPanel() {
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [customerFilter, customers, query, quotes]);
+  }, [customerFilter, customers, query, quotes, statusFilter]);
 
   const productTypes = useMemo(() => {
     const names = new Set<string>();
@@ -438,6 +544,8 @@ export function QuotesPanel() {
     setCatalogQuery("");
     setConfirmDelete(false);
     setGeneratedFile(null);
+    setFailureOpen(false);
+    setFailureReason("");
     setError(null);
   }
 
@@ -447,6 +555,8 @@ export function QuotesPanel() {
     setCatalogQuery("");
     setConfirmDelete(false);
     setGeneratedFile(null);
+    setFailureOpen(false);
+    setFailureReason("");
     setError(null);
     const listed = quotes.find((quote) => quote.id === quoteId);
     if (listed) setForm(fromQuote(listed, products));
@@ -462,6 +572,14 @@ export function QuotesPanel() {
       setError(err instanceof Error ? err.message : "Không tải được chi tiết báo giá.");
     }
   }
+
+  useEffect(() => {
+    if (!initialQuoteId || loadingList) return;
+    if (openedInitialId.current === initialQuoteId) return;
+    if (!quotes.some((quote) => quote.id === initialQuoteId)) return;
+    openedInitialId.current = initialQuoteId;
+    void openQuote(initialQuoteId);
+  }, [initialQuoteId, loadingList, quotes]);
 
   function updateField<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -639,9 +757,10 @@ export function QuotesPanel() {
 
     setConverting(true);
     setError(null);
+    let quoteId = creating ? "" : selectedId ?? "";
+    let convertStarted = false;
     try {
       const token = await withToken();
-      let quoteId = creating ? "" : selectedId ?? "";
       if (creating) {
         const created = await createQuote(token, payload);
         setQuotes((current) => [created, ...current]);
@@ -659,16 +778,113 @@ export function QuotesPanel() {
       if (!quoteId) {
         throw new Error("Không xác định được báo giá.");
       }
+      convertStarted = true;
       const order = await convertQuoteToOrder(token, quoteId);
+      const converted = await getQuote(token, quoteId);
+      setQuotes((current) =>
+        current.map((quote) => (quote.id === converted.id ? converted : quote)),
+      );
       toast.success("Đã chuyển báo giá thành đơn hàng.");
       router.push(`/orders?id=${encodeURIComponent(order.id)}`);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Không chuyển được báo giá thành đơn hàng.";
+      if (convertStarted && quoteId) {
+        try {
+          const token = await withToken();
+          const failedQuote = await getQuote(token, quoteId);
+          setQuotes((current) =>
+            current.map((quote) => (quote.id === failedQuote.id ? failedQuote : quote)),
+          );
+          setForm(fromQuote(failedQuote, products));
+        } catch {
+          setQuotes((current) =>
+            current.map((quote) =>
+              quote.id === quoteId
+                ? { ...quote, status: "failed", conversion_error: message }
+                : quote,
+            ),
+          );
+        }
+      }
       setError(message);
       toast.error(message);
     } finally {
       setConverting(false);
+    }
+  }
+
+  async function onChooseStatus(status: QuoteStatus) {
+    if (status === "converted") {
+      setFailureOpen(false);
+      await onConvertToOrder();
+      return;
+    }
+    if (status === "failed" && !failureOpen) {
+      setFailureReason(selected?.conversion_error?.trim() ?? "");
+      setFailureOpen(true);
+      return;
+    }
+    await saveStatus(status);
+  }
+
+  async function saveStatus(status: "failed" | "unset") {
+    const payload = toPayload(form);
+    if (!payload.customer_id) {
+      toast.error("Hãy chọn khách hàng trước khi đổi trạng thái.");
+      return;
+    }
+    if (payload.items.length === 0) {
+      toast.error("Báo giá cần ít nhất một sản phẩm.");
+      return;
+    }
+
+    if (status === "unset") setFailureOpen(false);
+    setSavingStatus(true);
+    setError(null);
+    let quoteId = creating ? "" : selectedId ?? "";
+    try {
+      const token = await withToken();
+      if (creating) {
+        const created = await createQuote(token, payload);
+        setQuotes((current) => [created, ...current]);
+        setCreating(false);
+        setSelectedId(created.id);
+        setForm(fromQuote(created, products));
+        quoteId = created.id;
+      } else if (quoteId) {
+        const updated = await updateQuote(token, quoteId, payload);
+        setQuotes((current) =>
+          current.map((quote) => (quote.id === updated.id ? updated : quote)),
+        );
+        setForm(fromQuote(updated, products));
+      }
+      if (!quoteId) {
+        throw new Error("Không xác định được báo giá.");
+      }
+      const updated = await setQuoteStatus(
+        token,
+        quoteId,
+        status,
+        status === "failed" ? failureReason.trim() : "",
+      );
+      setQuotes((current) =>
+        current.map((quote) => (quote.id === updated.id ? updated : quote)),
+      );
+      setForm(fromQuote(updated, products));
+      setFailureOpen(false);
+      toast.success(
+        status === "failed"
+          ? "Đã chuyển báo giá sang thất bại."
+          : "Đã chuyển báo giá sang chưa xác định.",
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không cập nhật được trạng thái báo giá.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setSavingStatus(false);
     }
   }
 
@@ -699,7 +915,8 @@ export function QuotesPanel() {
       ? `${customerLabel(selectedCustomer)} · ${quoteLabel(selected)}`
       : "Chi tiết báo giá";
   const totals = summarizeQuote(form.items);
-  const busy = saving || generating || converting;
+  const busy = saving || generating || converting || savingStatus;
+  const currentStatus = creating ? null : selected ? quoteStatus(selected.status) : null;
   const driveLink = quoteDriveLink(selected) || generatedFile?.web_link || "";
 
   return (
@@ -748,6 +965,19 @@ export function QuotesPanel() {
                 ))}
               </select>
             </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Trạng thái
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as "" | QuoteStatus)}
+                className={inputClass}
+              >
+                <option value="">Tất cả</option>
+                <option value="converted">{QUOTE_STATUS_LABEL.converted}</option>
+                <option value="failed">{QUOTE_STATUS_LABEL.failed}</option>
+                <option value="unset">{QUOTE_STATUS_LABEL.unset}</option>
+              </select>
+            </label>
             <label htmlFor="quote-search" className="sr-only">
               Tìm báo giá
             </label>
@@ -768,9 +998,11 @@ export function QuotesPanel() {
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 {quotes.length === 0
                   ? "Chưa có báo giá. Bấm “Thêm báo giá” để tạo mới."
-                  : customerFilter
-                    ? "Khách hàng này chưa có báo giá."
-                    : "Không tìm thấy báo giá phù hợp."}
+                  : statusFilter
+                    ? "Không có báo giá ở trạng thái này."
+                    : customerFilter
+                      ? "Khách hàng này chưa có báo giá."
+                      : "Không tìm thấy báo giá phù hợp."}
               </li>
             ) : (
               filtered.map((quote) => {
@@ -789,7 +1021,7 @@ export function QuotesPanel() {
                       <button
                         type="button"
                         onClick={() => void openQuote(quote.id)}
-                        className="w-full px-3 py-3 text-left"
+                        className="w-full px-3 pt-3 pb-1 text-left"
                       >
                         <p className="truncate text-sm font-bold">
                           {customerLabel(quoteCustomer(quote, customers))}
@@ -816,19 +1048,26 @@ export function QuotesPanel() {
                           </p>
                         ) : null}
                       </button>
-                      {fileLink ? (
-                        <a
-                          href={fileLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(event) => event.stopPropagation()}
-                          className={`mx-3 mb-3 inline-flex text-xs font-medium underline ${
-                            active ? "opacity-90" : "text-black/70 dark:text-white/70"
-                          }`}
-                        >
-                          Xem file Drive
-                        </a>
-                      ) : null}
+                      <div className="px-3 pb-3">
+                        <QuoteStatusLine
+                          status={quote.status}
+                          reason={quote.conversion_error}
+                          orderId={quote.order_id}
+                          active={active}
+                        />
+                        {fileLink ? (
+                          <a
+                            href={fileLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`mt-1 inline-flex text-xs font-medium underline ${
+                              active ? "opacity-90" : "text-black/70 dark:text-white/70"
+                            }`}
+                          >
+                            Xem file Drive
+                          </a>
+                        ) : null}
+                      </div>
                     </div>
                   </li>
                 );
@@ -861,7 +1100,16 @@ export function QuotesPanel() {
                   >
                     Danh sách
                   </button>
-                  <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-base font-semibold tracking-tight">{title}</h2>
+                    {!creating && selected ? (
+                      <QuoteStatusLine
+                        status={selected.status}
+                        reason={selected.conversion_error}
+                        orderId={selected.order_id}
+                      />
+                    ) : null}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {driveLink ? (
@@ -908,42 +1156,90 @@ export function QuotesPanel() {
                 </div>
               </div>
 
-              {error ? (
-                <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-                  {error}
-                </p>
-              ) : null}
-
-              {generating ? (
-                <p className="rounded-lg border border-black/15 px-3 py-2 text-sm text-black/70 dark:border-white/20 dark:text-white/70">
-                  Đang copy mẫu bao-gia.xls và điền dữ liệu. Việc này có thể mất khoảng một phút.
-                </p>
-              ) : null}
-
-              {generatedFile ? (
-                <div className="rounded-lg border border-black/15 bg-black/[0.03] px-3 py-3 text-sm dark:border-white/20 dark:bg-white/[0.04]">
-                  <p className="font-medium">Đã tạo file từ mẫu bao-gia.xls</p>
-                  <p className="mt-1 truncate text-black/70 dark:text-white/70">
-                    {generatedFile.file_name}
-                    {generatedFile.sheet_name
-                      ? ` · sheet ${generatedFile.sheet_name}`
-                      : ""}
-                  </p>
-                  {generatedFile.summary ? (
-                    <p className="mt-1 text-black/60 dark:text-white/60">
-                      {generatedFile.summary}
-                    </p>
-                  ) : null}
-                  <a
-                    href={generatedFile.web_link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-flex h-9 items-center rounded-md bg-black px-3 text-sm font-medium text-white dark:bg-white dark:text-black"
+              <div className="flex flex-col gap-3 rounded-xl border border-black/10 p-4 dark:border-white/10">
+                <p className="text-sm font-medium">Trạng thái báo giá</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void onChooseStatus("converted")}
+                    disabled={busy}
+                    aria-pressed={currentStatus === "converted"}
+                    className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-4 text-sm font-medium disabled:opacity-50 ${
+                      currentStatus === "converted"
+                        ? "border-emerald-700 bg-emerald-700 text-white"
+                        : "border-emerald-300 text-emerald-800 dark:border-emerald-800 dark:text-emerald-200"
+                    }`}
                   >
-                    Mở Google Sheet
-                  </a>
+                    <CircleCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                    {converting ? "Đang chuyển..." : QUOTE_STATUS_LABEL.converted}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onChooseStatus("failed")}
+                    disabled={busy}
+                    aria-pressed={currentStatus === "failed" || failureOpen}
+                    className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-4 text-sm font-medium disabled:opacity-50 ${
+                      currentStatus === "failed" || failureOpen
+                        ? "border-red-700 bg-red-700 text-white"
+                        : "border-red-300 text-red-800 dark:border-red-800 dark:text-red-200"
+                    }`}
+                  >
+                    <CircleX className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                    {savingStatus && failureOpen ? "Đang cập nhật..." : QUOTE_STATUS_LABEL.failed}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onChooseStatus("unset")}
+                    disabled={busy}
+                    aria-pressed={currentStatus === "unset"}
+                    className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-4 text-sm font-medium disabled:opacity-50 ${
+                      currentStatus === "unset"
+                        ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                        : "border-black/15 dark:border-white/20"
+                    }`}
+                  >
+                    <Circle className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                    {savingStatus && !failureOpen ? "Đang cập nhật..." : QUOTE_STATUS_LABEL.unset}
+                  </button>
                 </div>
-              ) : null}
+                {failureOpen ? (
+                  <div className="flex flex-col gap-2">
+                    <label className="flex flex-col gap-1 text-sm">
+                      Lý do thất bại
+                      <textarea
+                        value={failureReason}
+                        onChange={(event) => setFailureReason(event.target.value)}
+                        rows={2}
+                        maxLength={1000}
+                        placeholder="Không bắt buộc"
+                        className={inputClass}
+                        disabled={busy}
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void saveStatus("failed")}
+                        disabled={busy}
+                        className="h-10 rounded-lg bg-red-700 px-4 text-sm font-medium text-white disabled:opacity-50"
+                      >
+                        {savingStatus ? "Đang cập nhật..." : "Xác nhận thất bại"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFailureOpen(false)}
+                        disabled={busy}
+                        className="h-10 rounded-lg border border-black/15 px-4 text-sm dark:border-white/20"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {!creating && selected ? (
+                  <QuoteStatusHistory events={selected.status_events} />
+                ) : null}
+              </div>
 
               <CustomerPicker
                 customers={customers}
@@ -1221,14 +1517,6 @@ export function QuotesPanel() {
               </div>
 
               <div className="flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => void onConvertToOrder()}
-                  disabled={busy}
-                  className="h-10 rounded-lg border border-black/15 px-4 text-sm font-medium disabled:opacity-50 dark:border-white/20"
-                >
-                  {converting ? "Đang chuyển..." : "Chuyển thành đơn hàng"}
-                </button>
                 <button
                   type="button"
                   onClick={() => void onGenerateFile()}
