@@ -261,13 +261,7 @@ export function ProductsPanel() {
     try {
       const token = await withToken();
       const result = await importProducts(token, file);
-      setProducts((current) => {
-        const incomingIds = new Set(result.products.map((product) => product.id));
-        return [
-          ...result.products,
-          ...current.filter((product) => !incomingIds.has(product.id)),
-        ];
-      });
+      setProducts(await listProducts(token));
       const errorCount = result.errors.length;
       const notes = [
         result.updated
