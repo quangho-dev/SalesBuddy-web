@@ -501,10 +501,16 @@ export function CustomersPanel() {
     try {
       const token = await withToken();
       const result = await importCustomers(token, file);
-      setCustomers((current) => [...result.customers, ...current]);
+      setCustomers((current) => {
+        const incomingIds = new Set(result.customers.map((customer) => customer.id));
+        return [
+          ...result.customers,
+          ...current.filter((customer) => !incomingIds.has(customer.id)),
+        ];
+      });
       const notes = [
-        result.duplicates
-          ? `bỏ qua ${result.duplicates} khách trùng tên công ty và mã số thuế`
+        result.updated
+          ? `cập nhật ${result.updated} khách trùng tên hoặc mã số thuế`
           : "",
         result.skipped ? `bỏ qua ${result.skipped} dòng trống` : "",
       ].filter(Boolean);

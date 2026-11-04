@@ -58,6 +58,7 @@ export type ProductImportResult = {
 
 export type CustomerImportResult = {
   imported: number;
+  updated?: number;
   skipped: number;
   duplicates?: number;
   customers: Customer[];
