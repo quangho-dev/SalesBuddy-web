@@ -166,6 +166,7 @@ export function CustomerPicker({
           0,
           Math.round(Number(newCustomer.payment_term_days) || 0),
         ),
+        customer_code: "",
         address: "",
         website: "",
         facebook: "",

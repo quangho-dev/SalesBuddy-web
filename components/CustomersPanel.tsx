@@ -6,6 +6,7 @@ import {
   createCustomer,
   deleteCustomer,
   downloadCustomerTemplate,
+  downloadCustomersExport,
   getCustomer,
   getSettings,
   importCustomers,
@@ -21,6 +22,7 @@ type FormState = Omit<CustomerInput, "interaction_history" | "payment_term_days"
 };
 
 const EMPTY_FORM: FormState = {
+  customer_code: "",
   company_name: "",
   contact_person: "",
   address: "",
@@ -58,6 +60,7 @@ function latestInteractionTime(customer: Customer) {
 
 function fromCustomer(customer: Customer): FormState {
   return {
+    customer_code: customer.customer_code ?? "",
     company_name: customer.company_name ?? "",
     contact_person: customer.contact_person ?? "",
     address: customer.address ?? "",
@@ -248,6 +251,7 @@ export function CustomersPanel() {
   const [query, setQuery] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -261,6 +265,7 @@ export function CustomersPanel() {
     const rows = needle
       ? customers.filter((customer) =>
           [
+            customer.customer_code,
             customer.company_name,
             customer.contact_person,
             customer.phone_number,
@@ -490,6 +495,19 @@ export function CustomersPanel() {
     }
   }
 
+  async function onExportCustomers() {
+    setError(null);
+    setExporting(true);
+    try {
+      const token = await withToken();
+      await downloadCustomersExport(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không xuất được file Excel.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function onImportFile(file: File) {
     if (!file.name.toLowerCase().endsWith(".xlsx")) {
       setError("Chỉ hỗ trợ file .xlsx");
@@ -510,7 +528,7 @@ export function CustomersPanel() {
       });
       const notes = [
         result.updated
-          ? `cập nhật ${result.updated} khách trùng tên hoặc mã số thuế`
+          ? `cập nhật ${result.updated} khách trùng mã số thuế hoặc mã khách hàng`
           : "",
         result.skipped ? `bỏ qua ${result.skipped} dòng trống` : "",
       ].filter(Boolean);
@@ -540,7 +558,7 @@ export function CustomersPanel() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Khách hàng</h1>
           <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-            Thêm, sửa, xóa và xem lịch sử tương tác.
+            Thêm, sửa, xóa, xuất Excel và xem lịch sử tương tác.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -565,10 +583,18 @@ export function CustomersPanel() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={saving}
+            disabled={saving || exporting}
             className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
           >
             {saving ? "Đang xử lý..." : "Import Excel"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void onExportCustomers()}
+            disabled={saving || exporting}
+            className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
+          >
+            {exporting ? "Đang xuất..." : "Xuất Excel"}
           </button>
           <button
             type="button"
@@ -605,11 +631,11 @@ export function CustomersPanel() {
               id="customer-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm công ty, người liên hệ..."
+              placeholder="Tìm mã khách hàng, công ty, người liên hệ..."
               className={inputClass}
             />
           </div>
-          <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+          <ul className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
             {loadingList ? (
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 Đang tải...
@@ -629,10 +655,10 @@ export function CustomersPanel() {
                     <button
                       type="button"
                       onClick={() => void openCustomer(customer.id)}
-                      className={`flex w-full flex-col overflow-hidden rounded-lg border text-left ${
+                      className={`flex w-full flex-col overflow-hidden rounded-lg border-2 text-left shadow-sm ${
                         active
-                          ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
-                          : "border-black/10 bg-white hover:border-black/25 dark:border-white/15 dark:bg-transparent dark:hover:border-white/30"
+                          ? "border-black bg-black text-white shadow-black/20 dark:border-white dark:bg-white dark:text-black dark:shadow-white/20"
+                          : "border-black/45 bg-white shadow-black/10 hover:border-black/70 dark:border-white/70 dark:bg-white/[0.04] dark:shadow-white/10 dark:hover:border-white"
                       }`}
                     >
                       <div className="min-w-0 w-full px-3 py-2.5">
@@ -791,6 +817,15 @@ export function CustomersPanel() {
               ) : null}
 
               <div className="grid gap-4 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm">
+                  Mã khách hàng
+                  <input
+                    value={form.customer_code}
+                    onChange={(event) => updateField("customer_code", event.target.value)}
+                    className={inputClass}
+                    disabled={saving}
+                  />
+                </label>
                 <label className="flex flex-col gap-1 text-sm">
                   Tên công ty
                   <input

@@ -9,6 +9,7 @@ export type CustomerInteraction = {
 export type Customer = {
   id: string;
   clerk_id: string;
+  customer_code: string;
   company_name: string;
   contact_person: string;
   address: string;
@@ -222,6 +223,7 @@ export type RagSettings = {
 };
 
 export type CustomerInput = {
+  customer_code: string;
   company_name: string;
   contact_person: string;
   address: string;
@@ -505,6 +507,24 @@ export async function downloadCustomerTemplate(token: string): Promise<void> {
   const link = document.createElement("a");
   link.href = url;
   link.download = "mau-khach-hang.xlsx";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadCustomersExport(token: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/customers/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error("Không xuất được file Excel.");
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "khach-hang.xlsx";
   document.body.appendChild(link);
   link.click();
   link.remove();
