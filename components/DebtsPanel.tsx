@@ -17,7 +17,9 @@ const DUE_FILTERS = [
   { value: "all", label: "Tất cả công nợ" },
   { value: "overdue", label: "Quá hạn thanh toán" },
   { value: "current", label: "Chưa quá hạn" },
+  { value: "due_soon", label: "Còn 30% đến hạn" },
 ] as const;
+const DUE_SOON_RATIO = 0.3;
 
 type DueFilter = (typeof DUE_FILTERS)[number]["value"];
 const VAT_RATE = 0.1;
@@ -108,10 +110,35 @@ function orderRemaining(order: Order): number {
   return Math.max(0, orderTotal(order) - amountPaid(order));
 }
 
+function calendarDayNumber(value?: string): number | null {
+  const iso = calendarDate(value);
+  const [year, month, day] = iso.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+}
+
+function daysUntilDue(dueIso: string, today: string): number | null {
+  const due = calendarDayNumber(dueIso);
+  const now = calendarDayNumber(today);
+  if (due === null || now === null) return null;
+  return due - now;
+}
+
 function isOverdue(order: Order, customers: Customer[]): boolean {
   const customer = orderCustomer(order, customers);
   const dueIso = dueDateIso(order.order_date, paymentTermDays(customer));
-  return Boolean(dueIso && dueIso < todayIso());
+  const remaining = daysUntilDue(dueIso, todayIso());
+  return remaining !== null && remaining < 0;
+}
+
+function isInFinalDueShare(order: Order, customers: Customer[]): boolean {
+  const customer = orderCustomer(order, customers);
+  const termDays = paymentTermDays(customer);
+  const dueIso = dueDateIso(order.order_date, termDays);
+  const remaining = daysUntilDue(dueIso, todayIso());
+  if (remaining === null || remaining < 0) return false;
+  const windowDays = Math.round(termDays * DUE_SOON_RATIO);
+  return remaining <= windowDays;
 }
 
 function paymentMethodLabel(method?: string | null) {
@@ -141,6 +168,8 @@ export function DebtsPanel() {
       rows = rows.filter((order) => isOverdue(order, customers));
     } else if (dueFilter === "current") {
       rows = rows.filter((order) => !isOverdue(order, customers));
+    } else if (dueFilter === "due_soon") {
+      rows = rows.filter((order) => isInFinalDueShare(order, customers));
     }
     const needle = query.trim().toLowerCase();
     if (!needle) return rows;
@@ -305,9 +334,11 @@ export function DebtsPanel() {
                       ? "Không có công nợ quá hạn thanh toán."
                       : dueFilter === "current"
                         ? "Không có công nợ chưa quá hạn."
-                        : customerFilter
-                          ? "Khách hàng này không còn công nợ."
-                          : "Không tìm thấy công nợ phù hợp."}
+                        : dueFilter === "due_soon"
+                          ? "Không có công nợ trong 30% thời hạn cuối."
+                          : customerFilter
+                            ? "Khách hàng này không còn công nợ."
+                            : "Không tìm thấy công nợ phù hợp."}
               </li>
             ) : (
               filtered.map((order) => {
@@ -315,7 +346,8 @@ export function DebtsPanel() {
                 const customer = orderCustomer(order, customers);
                 const items = order.items ?? [];
                 const dueIso = dueDateIso(order.order_date, paymentTermDays(customer));
-                const overdue = Boolean(dueIso && dueIso < todayIso());
+                const remainingDays = daysUntilDue(dueIso, todayIso());
+                const overdue = remainingDays !== null && remainingDays < 0;
                 return (
                   <li key={order.id}>
                     <button

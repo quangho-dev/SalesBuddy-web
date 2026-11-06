@@ -25,6 +25,8 @@ import {
 
 type ItemForm = {
   key: string;
+  product_id: string;
+  product_code: string;
   product_name: string;
   unit: string;
   quantity: string;
@@ -110,6 +112,8 @@ function formatDateTime(value?: string | null): string {
 function newItem(overrides: Partial<ItemForm> = {}): ItemForm {
   return {
     key: crypto.randomUUID(),
+    product_id: "",
+    product_code: "",
     product_name: "",
     unit: "",
     quantity: "1",
@@ -218,17 +222,21 @@ function fromOrder(order: Order, products: Product[] = []): FormState {
         ? order.items.map((item) =>
             newItem({
               key: item.id || crypto.randomUUID(),
+              product_id: item.product_id ?? "",
+              product_code: item.product_code ?? "",
               product_name: item.product_name ?? "",
               unit: item.unit ?? "",
               quantity: String(toNumber(item.quantity)),
               selling_price: String(toNumber(item.selling_price)),
               vat_invoice: Boolean(item.vat_invoice),
               notes: item.notes ?? "",
-              custom: !products.some(
-                (product) =>
-                  product.name.trim().toLowerCase() ===
-                  (item.product_name ?? "").trim().toLowerCase(),
-              ),
+              custom: item.product_id
+                ? false
+                : !products.some(
+                    (product) =>
+                      product.name.trim().toLowerCase() ===
+                      (item.product_name ?? "").trim().toLowerCase(),
+                  ),
             }),
           )
         : [newItem()],
@@ -238,6 +246,8 @@ function fromOrder(order: Order, products: Product[] = []): FormState {
 function toPayload(form: FormState): OrderInput {
   const items = form.items
     .map((item) => ({
+      product_id: item.product_id || null,
+      product_code: item.product_code.trim(),
       product_name: item.product_name.trim(),
       unit: item.unit,
       quantity: toNumber(item.quantity),
@@ -261,6 +271,13 @@ function toPayload(form: FormState): OrderInput {
 
 function productLabel(product: Product) {
   return product.name.trim() || product.product_code.trim() || "Sản phẩm chưa đặt tên";
+}
+
+function itemLabel(item: { product_code?: string | null; product_name?: string | null }) {
+  const name = (item.product_name ?? "").trim();
+  const code = (item.product_code ?? "").trim();
+  if (!name) return "";
+  return code ? `${code} · ${name}` : name;
 }
 
 function matchesProductSearch(product: Product, needle: string) {
@@ -452,7 +469,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
         formatDateTime(order.delivered_at),
         formatOrderMoment(order.order_date),
         order.order_date,
-        ...(order.items ?? []).map((item) => item.product_name),
+        ...(order.items ?? []).flatMap((item) => [item.product_code, item.product_name]),
       ]
         .join(" ")
         .toLowerCase();
@@ -613,9 +630,12 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
   function addFromCatalog(product: Product) {
     setCatalogQuery("");
     const filled = newItem({
+      product_id: product.id,
+      product_code: product.product_code,
       product_name: product.name,
       unit: product.unit,
       selling_price: String(toNumber(product.selling_price)),
+      custom: false,
     });
     setForm((current) => {
       const blank = current.items.find((item) => !item.product_name.trim());
@@ -923,7 +943,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                               active ? "opacity-80" : "text-black/55 dark:text-white/55"
                             }`}
                           >
-                            {items.map((item) => item.product_name).filter(Boolean).join(", ")}
+                            {items.map((item) => itemLabel(item)).filter(Boolean).join(", ")}
                           </p>
                         ) : null}
                       </button>
@@ -1318,6 +1338,11 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                         <p className="text-xs font-medium text-black/60 dark:text-white/60">
                           Dòng {index + 1}
                           {item.custom ? " · Hàng ngoài kho" : ""}
+                          {item.product_code.trim() ? (
+                            <span className="ml-2 font-semibold text-black dark:text-white">
+                              Mã {item.product_code.trim()}
+                            </span>
+                          ) : null}
                         </p>
                         <button
                           type="button"
@@ -1356,9 +1381,16 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                               placeholder="Tìm hoặc gõ tên hàng"
                               inputId={`order-item-name-${item.key}`}
                               resultsId={`order-item-results-${item.key}`}
-                              onQueryChange={(value) =>
-                                updateItem(item.key, "product_name", value)
-                              }
+                              onQueryChange={(value) => {
+                                setForm((current) => ({
+                                  ...current,
+                                  items: current.items.map((row) =>
+                                    row.key === item.key
+                                      ? { ...row, product_name: value, product_id: "", product_code: "" }
+                                      : row,
+                                  ),
+                                }));
+                              }}
                               onPick={(product) => {
                                 setForm((current) => ({
                                   ...current,
@@ -1366,6 +1398,8 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                                     row.key === item.key
                                       ? {
                                           ...row,
+                                          product_id: product.id,
+                                          product_code: product.product_code,
                                           product_name: product.name,
                                           unit: product.unit,
                                           selling_price: String(toNumber(product.selling_price)),
@@ -1380,7 +1414,13 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                                   ...current,
                                   items: current.items.map((row) =>
                                     row.key === item.key
-                                      ? { ...row, product_name: name, custom: true }
+                                      ? {
+                                          ...row,
+                                          product_id: "",
+                                          product_code: "",
+                                          product_name: name,
+                                          custom: true,
+                                        }
                                       : row,
                                   ),
                                 }));

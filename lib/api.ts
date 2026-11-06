@@ -78,6 +78,8 @@ export type OrderCustomer = {
 
 export type OrderItem = {
   id: string;
+  product_id?: string | null;
+  product_code?: string;
   product_name: string;
   unit: string;
   quantity: number | string;
@@ -108,6 +110,8 @@ export type Order = {
 };
 
 export type OrderItemInput = {
+  product_id?: string | null;
+  product_code?: string;
   product_name: string;
   unit: string;
   quantity: number;
