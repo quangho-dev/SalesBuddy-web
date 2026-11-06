@@ -58,6 +58,20 @@ export type ProductImportResult = {
   products: Product[];
 };
 
+export type ProductImportRow = {
+  row: number;
+  product: ProductInput;
+  changes: Partial<ProductInput>;
+};
+
+export type ProductImportParseResult = {
+  rows: ProductImportRow[];
+  errors: { row: number; message: string }[];
+  skipped: number;
+};
+
+export const PRODUCT_IMPORT_BATCH_SIZE = 50;
+
 export type CustomerImportResult = {
   imported: number;
   updated?: number;
@@ -65,6 +79,18 @@ export type CustomerImportResult = {
   duplicates?: number;
   customers: Customer[];
 };
+
+export type CustomerImportRow = {
+  customer: CustomerInput;
+};
+
+export type CustomerImportParseResult = {
+  rows: CustomerImportRow[];
+  mapped_fields: string[];
+  skipped: number;
+};
+
+export const CUSTOMER_IMPORT_BATCH_SIZE = 50;
 
 export type OrderCustomer = {
   id: string;
@@ -475,6 +501,41 @@ export async function deleteCustomer(
   );
 }
 
+export async function parseCustomerImport(
+  token: string,
+  file: File,
+): Promise<CustomerImportParseResult> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch(`${API_URL}/api/customers/import/parse`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body,
+  });
+  if (!response.ok) {
+    let detail = `Request failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) detail = payload.detail;
+    } catch {
+      // keep default message
+    }
+    throw new Error(detail);
+  }
+  return (await response.json()) as CustomerImportParseResult;
+}
+
+export async function importCustomerBatch(
+  token: string,
+  rows: CustomerImportRow[],
+  mappedFields: string[],
+): Promise<CustomerImportResult> {
+  return apiJson<CustomerImportResult>("/api/customers/import/batch", token, {
+    method: "POST",
+    body: JSON.stringify({ rows, mapped_fields: mappedFields }),
+  });
+}
+
 export async function importCustomers(
   token: string,
   file: File,
@@ -576,6 +637,40 @@ export async function deleteProduct(
     token,
     { method: "DELETE" },
   );
+}
+
+export async function parseProductImport(
+  token: string,
+  file: File,
+): Promise<ProductImportParseResult> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch(`${API_URL}/api/products/import/parse`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body,
+  });
+  if (!response.ok) {
+    let detail = `Request failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) detail = payload.detail;
+    } catch {
+      // keep default message
+    }
+    throw new Error(detail);
+  }
+  return (await response.json()) as ProductImportParseResult;
+}
+
+export async function importProductBatch(
+  token: string,
+  rows: ProductImportRow[],
+): Promise<ProductImportResult> {
+  return apiJson<ProductImportResult>("/api/products/import/batch", token, {
+    method: "POST",
+    body: JSON.stringify({ rows }),
+  });
 }
 
 export async function importProducts(

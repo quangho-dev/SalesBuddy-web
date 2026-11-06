@@ -8,7 +8,9 @@ import {
   downloadProductTemplate,
   downloadProductsExport,
   getProduct,
-  importProducts,
+  PRODUCT_IMPORT_BATCH_SIZE,
+  importProductBatch,
+  parseProductImport,
   listProducts,
   updateProduct,
   type Product,
@@ -88,6 +90,9 @@ export function ProductsPanel() {
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
   const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +134,14 @@ export function ProductsPanel() {
 
   const withToken = useCallback(async () => {
     const token = await getToken();
+    if (!token) {
+      throw new Error("Không lấy được phiên đăng nhập. Hãy đăng nhập lại.");
+    }
+    return token;
+  }, [getToken]);
+
+  const freshToken = useCallback(async () => {
+    const token = await getToken({ skipCache: true });
     if (!token) {
       throw new Error("Không lấy được phiên đăng nhập. Hãy đăng nhập lại.");
     }
@@ -271,29 +284,54 @@ export function ProductsPanel() {
       return;
     }
     setSaving(true);
+    setImportProgress(null);
     setError(null);
     setNotice(null);
+    let imported = 0;
+    let updated = 0;
     try {
-      const token = await withToken();
-      const result = await importProducts(token, file);
-      setProducts(await listProducts(token));
-      const errorCount = result.errors.length;
+      const parsed = await parseProductImport(await freshToken(), file);
+      const rows = parsed.rows;
+      const errors = [...parsed.errors];
+      for (let index = 0; index < rows.length; index += PRODUCT_IMPORT_BATCH_SIZE) {
+        const batch = rows.slice(index, index + PRODUCT_IMPORT_BATCH_SIZE);
+        setImportProgress({ done: index, total: rows.length });
+        const result = await importProductBatch(await freshToken(), batch);
+        imported += result.imported;
+        updated += result.updated ?? 0;
+        errors.push(...result.errors);
+        setImportProgress({
+          done: Math.min(index + batch.length, rows.length),
+          total: rows.length,
+        });
+      }
+      setProducts(await listProducts(await freshToken()));
+      const errorCount = errors.length;
       const notes = [
-        result.updated
-          ? `cập nhật ${result.updated} sản phẩm trùng mã`
-          : "",
-        result.skipped ? `bỏ qua ${result.skipped} dòng trống` : "",
+        updated ? `cập nhật ${updated} sản phẩm trùng mã` : "",
+        parsed.skipped ? `bỏ qua ${parsed.skipped} dòng trống` : "",
         errorCount ? `${errorCount} dòng lỗi` : "",
       ].filter(Boolean);
       setNotice(
-        `Đã import ${result.imported} sản phẩm` +
+        `Đã import ${imported} sản phẩm` +
           (notes.length ? `, ${notes.join(", ")}` : "") +
           ".",
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không import được file Excel.");
+      const message = err instanceof Error ? err.message : "Không import được file Excel.";
+      setError(
+        imported || updated
+          ? `${message} Đã lưu ${imported} sản phẩm mới và cập nhật ${updated} sản phẩm.`
+          : message,
+      );
+      try {
+        setProducts(await listProducts(await freshToken()));
+      } catch {
+        // Keep the list already on screen when the reload also fails.
+      }
     } finally {
       setSaving(false);
+      setImportProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
@@ -339,7 +377,11 @@ export function ProductsPanel() {
             disabled={saving || exporting}
             className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
           >
-            {saving ? "Đang xử lý..." : "Import Excel"}
+            {importProgress
+              ? `Đang import ${importProgress.done}/${importProgress.total}...`
+              : saving
+                ? "Đang xử lý..."
+                : "Import Excel"}
           </button>
           <button
             type="button"
