@@ -13,6 +13,13 @@ import {
 } from "@/lib/api";
 
 const ALL_CUSTOMERS = "";
+const DUE_FILTERS = [
+  { value: "all", label: "Tất cả công nợ" },
+  { value: "overdue", label: "Quá hạn thanh toán" },
+  { value: "current", label: "Chưa quá hạn" },
+] as const;
+
+type DueFilter = (typeof DUE_FILTERS)[number]["value"];
 const VAT_RATE = 0.1;
 const inputClass =
   "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50";
@@ -91,6 +98,12 @@ function orderRemaining(order: Order): number {
   return Math.max(0, orderTotal(order) - amountPaid(order));
 }
 
+function isOverdue(order: Order, customers: Customer[]): boolean {
+  const customer = orderCustomer(order, customers);
+  const dueIso = dueDateIso(order.order_date, paymentTermDays(customer));
+  return Boolean(dueIso && dueIso < todayIso());
+}
+
 function paymentMethodLabel(method?: string | null) {
   if (method === "cash") return "Tiền mặt";
   if (method === "bank_transfer") return "Chuyển khoản";
@@ -104,6 +117,7 @@ export function DebtsPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS);
+  const [dueFilter, setDueFilter] = useState<DueFilter>("all");
   const [loadingList, setLoadingList] = useState(true);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
@@ -112,6 +126,11 @@ export function DebtsPanel() {
     let rows = orders.filter((order) => !order.is_paid);
     if (customerFilter) {
       rows = rows.filter((order) => order.customer_id === customerFilter);
+    }
+    if (dueFilter === "overdue") {
+      rows = rows.filter((order) => isOverdue(order, customers));
+    } else if (dueFilter === "current") {
+      rows = rows.filter((order) => !isOverdue(order, customers));
     }
     const needle = query.trim().toLowerCase();
     if (!needle) return rows;
@@ -129,7 +148,7 @@ export function DebtsPanel() {
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [customers, customerFilter, orders, query]);
+  }, [customers, customerFilter, dueFilter, orders, query]);
 
   const outstandingTotal = useMemo(
     () => filtered.reduce((sum, order) => sum + orderRemaining(order), 0),
@@ -180,6 +199,10 @@ export function DebtsPanel() {
 
   const showDetail = selectedId !== null;
   const selectedCustomer = selected ? orderCustomer(selected, customers) : null;
+  const selectedDueIso = selected
+    ? dueDateIso(selected.order_date, paymentTermDays(selectedCustomer))
+    : "";
+  const selectedOverdue = selected ? isOverdue(selected, customers) : false;
   const selectedItems = selected?.items ?? [];
   const selectedTotals = selected
     ? selectedItems.reduce(
@@ -232,6 +255,20 @@ export function DebtsPanel() {
                 ))}
               </select>
             </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Hạn thanh toán
+              <select
+                value={dueFilter}
+                onChange={(event) => setDueFilter(event.target.value as DueFilter)}
+                className={inputClass}
+              >
+                {DUE_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label htmlFor="debt-search" className="sr-only">
               Tìm công nợ
             </label>
@@ -252,9 +289,15 @@ export function DebtsPanel() {
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 {orders.length === 0
                   ? "Không có đơn hàng chưa thanh toán."
-                  : customerFilter
-                    ? "Khách hàng này không còn công nợ."
-                    : "Không tìm thấy công nợ phù hợp."}
+                  : query.trim()
+                    ? "Không tìm thấy công nợ phù hợp."
+                    : dueFilter === "overdue"
+                      ? "Không có công nợ quá hạn thanh toán."
+                      : dueFilter === "current"
+                        ? "Không có công nợ chưa quá hạn."
+                        : customerFilter
+                          ? "Khách hàng này không còn công nợ."
+                          : "Không tìm thấy công nợ phù hợp."}
               </li>
             ) : (
               filtered.map((order) => {
@@ -279,12 +322,24 @@ export function DebtsPanel() {
                         <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                           {formatDate(order.order_date)}
                           {dueIso ? ` · Hạn ${formatDate(dueIso)}` : ""}
-                          {overdue ? " · Quá hạn" : ""}
                           {" · "}
                           {items.length} SP
                           {" · "}
                         </span>
                         <span className="font-bold">{formatPrice(orderRemaining(order))}đ</span>
+                      </p>
+                      <p
+                        className={`mt-1 text-xs font-medium ${
+                          overdue
+                            ? active
+                              ? "text-red-200"
+                              : "text-red-700 dark:text-red-300"
+                            : active
+                              ? "opacity-80"
+                              : "text-emerald-700 dark:text-emerald-300"
+                        }`}
+                      >
+                        {overdue ? "Quá hạn" : "Chưa quá hạn"}
                       </p>
                       {items[0]?.product_name ? (
                         <p
@@ -344,13 +399,16 @@ export function DebtsPanel() {
                 ) : null}
                 <p className="mt-1 text-xs text-black/60 dark:text-white/60">
                   Hạn công nợ: {paymentTermDays(selectedCustomer)} ngày kể từ ngày tạo đơn
-                  {dueDateIso(selected.order_date, paymentTermDays(selectedCustomer))
-                    ? ` · Hạn thanh toán ${formatDate(dueDateIso(selected.order_date, paymentTermDays(selectedCustomer)))}`
-                    : ""}
-                  {dueDateIso(selected.order_date, paymentTermDays(selectedCustomer)) &&
-                  dueDateIso(selected.order_date, paymentTermDays(selectedCustomer)) < todayIso()
-                    ? " · Quá hạn"
-                    : ""}
+                  {selectedDueIso ? ` · Hạn thanh toán ${formatDate(selectedDueIso)}` : ""}
+                </p>
+                <p
+                  className={`mt-1 text-xs font-medium ${
+                    selectedOverdue
+                      ? "text-red-700 dark:text-red-300"
+                      : "text-emerald-700 dark:text-emerald-300"
+                  }`}
+                >
+                  {selectedOverdue ? "Quá hạn" : "Chưa quá hạn"}
                 </p>
               </div>
 

@@ -2,6 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "react-toastify";
 import {
   createCustomer,
   deleteCustomer,
@@ -253,6 +254,7 @@ export function CustomersPanel() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -371,8 +373,12 @@ export function CustomersPanel() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  async function onSave(event: FormEvent<HTMLFormElement>) {
+  function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setConfirmSave(true);
+  }
+
+  async function saveCustomer() {
     setSaving(true);
     setError(null);
     try {
@@ -387,6 +393,7 @@ export function CustomersPanel() {
         setSelectedId(created.id);
         setForm(fromCustomer(created));
         setHistory(sortHistory(created.interaction_history));
+        toast.success("Đã tạo khách hàng.");
       } else if (selectedId) {
         const updated = await updateCustomer(token, selectedId, toCustomerPayload(form));
         setCustomers((current) =>
@@ -394,10 +401,15 @@ export function CustomersPanel() {
         );
         setForm(fromCustomer(updated));
         setHistory(sortHistory(updated.interaction_history ?? history));
+        toast.success("Đã lưu thông tin khách hàng.");
       }
       setConfirmDelete(false);
+      setConfirmSave(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không lưu được khách hàng.");
+      const message = err instanceof Error ? err.message : "Không lưu được khách hàng.";
+      setError(message);
+      toast.error(message);
+      setConfirmSave(false);
     } finally {
       setSaving(false);
     }
@@ -954,6 +966,50 @@ export function CustomersPanel() {
           )}
         </section>
       </div>
+
+      {confirmSave ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => {
+            if (!saving) setConfirmSave(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="save-customer-title"
+            className="w-full max-w-md rounded-xl border border-black/10 bg-white p-5 shadow-lg dark:border-white/15 dark:bg-black"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="save-customer-title" className="text-base font-semibold">
+              Lưu thông tin khách hàng
+            </h3>
+            <p className="mt-2 text-sm text-black/70 dark:text-white/70">
+              {creating
+                ? "Tạo khách hàng với thông tin đang nhập?"
+                : "Lưu các thay đổi của khách hàng này?"}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmSave(false)}
+                disabled={saving}
+                className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveCustomer()}
+                disabled={saving}
+                className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+              >
+                {saving ? "Đang lưu..." : "Xác nhận"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

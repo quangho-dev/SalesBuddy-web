@@ -6,6 +6,7 @@ import {
   createProduct,
   deleteProduct,
   downloadProductTemplate,
+  downloadProductsExport,
   getProduct,
   importProducts,
   listProducts,
@@ -87,6 +88,7 @@ export function ProductsPanel() {
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -250,6 +252,19 @@ export function ProductsPanel() {
     }
   }
 
+  async function onExportProducts() {
+    setError(null);
+    setExporting(true);
+    try {
+      const token = await withToken();
+      await downloadProductsExport(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không xuất được file Excel.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function onImportFile(file: File) {
     if (!file.name.toLowerCase().endsWith(".xlsx")) {
       setError("Chỉ hỗ trợ file .xlsx");
@@ -296,7 +311,7 @@ export function ProductsPanel() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Sản phẩm</h1>
           <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-            Thêm, sửa, xóa mã, đơn vị tính, giá bán và tồn kho.
+            Thêm, sửa, xóa, xuất Excel, mã, đơn vị tính, giá bán và tồn kho.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -313,7 +328,7 @@ export function ProductsPanel() {
           <button
             type="button"
             onClick={() => void onDownloadTemplate()}
-            disabled={saving}
+            disabled={saving || exporting}
             className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
           >
             Tải mẫu Excel
@@ -321,10 +336,18 @@ export function ProductsPanel() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={saving}
+            disabled={saving || exporting}
             className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
           >
             {saving ? "Đang xử lý..." : "Import Excel"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void onExportProducts()}
+            disabled={saving || exporting}
+            className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
+          >
+            {exporting ? "Đang xuất..." : "Xuất Excel"}
           </button>
           <button
             type="button"

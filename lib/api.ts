@@ -616,6 +616,24 @@ export async function downloadProductTemplate(token: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export async function downloadProductsExport(token: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/products/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error("Không xuất được file Excel.");
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "san-pham.xlsx";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function listOrders(
   token: string,
   filters?: { customerId?: string; isPaid?: boolean },
