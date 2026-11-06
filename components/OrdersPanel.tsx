@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { CustomerPicker, customerLabel } from "@/components/CustomerPicker";
+import { OrderDeliveryCard } from "@/components/OrderDeliveryCard";
 import {
   createOrder,
   deleteOrder,
@@ -1441,6 +1442,23 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                   ) : null}
                 </div>
               </div>
+
+              {!creating && selected ? (
+                <OrderDeliveryCard
+                  orderId={selected.id}
+                  customerName={customerLabel(selectedCustomer)}
+                  customerPhone={selectedCustomer?.phone_number ?? ""}
+                  customerAddress={selectedCustomer?.address ?? ""}
+                  onDelivered={async () => {
+                    const token = await withToken();
+                    const fresh = await getOrder(token, selected.id);
+                    setOrders((current) =>
+                      current.map((order) => (order.id === fresh.id ? fresh : order)),
+                    );
+                    setForm(fromOrder(fresh, products));
+                  }}
+                />
+              ) : null}
 
               <div className="flex flex-wrap justify-end gap-2">
                 <button

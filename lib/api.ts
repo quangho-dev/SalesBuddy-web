@@ -685,6 +685,132 @@ export async function deleteOrder(
   );
 }
 
+export type DeliveryStop = {
+  id: string;
+  stop_index: number;
+  role: "pickup" | "dropoff";
+  contact_name: string;
+  contact_phone: string;
+  address: string;
+  lat: number | string | null;
+  lng: number | string | null;
+  remarks: string;
+  provider_stop_id: string;
+};
+
+export type DeliveryEvent = {
+  id: string;
+  previous_status: string;
+  status: string;
+  provider_status: string;
+  reason: string;
+  created_at: string;
+};
+
+export type DeliveryStatus =
+  | "draft"
+  | "quoted"
+  | "assigning_driver"
+  | "ongoing"
+  | "picked_up"
+  | "completed"
+  | "canceled"
+  | "rejected"
+  | "expired"
+  | "failed";
+
+export type Delivery = {
+  id: string;
+  order_id: string | null;
+  customer_id: string | null;
+  status: DeliveryStatus;
+  service_type: string;
+  quotation_expires_at?: string | null;
+  provider_order_id: string;
+  share_link: string;
+  currency: string;
+  quoted_fee: number | string;
+  driver_name: string;
+  driver_phone: string;
+  driver_plate: string;
+  failure_reason: string;
+  stops: DeliveryStop[];
+  events: DeliveryEvent[];
+};
+
+export type DeliverySettings = {
+  pickup_name: string;
+  pickup_phone: string;
+  pickup_address: string;
+  pickup_lat: number | string | null;
+  pickup_lng: number | string | null;
+  market: string;
+  default_service_type: string;
+};
+
+export async function getDeliverySettings(token: string): Promise<DeliverySettings> {
+  return apiJson<DeliverySettings>("/api/delivery-settings/", token);
+}
+
+export async function updateDeliverySettings(
+  token: string,
+  payload: DeliverySettings,
+): Promise<DeliverySettings> {
+  return apiJson<DeliverySettings>("/api/delivery-settings/", token, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listDeliveries(
+  token: string,
+  orderId: string,
+): Promise<Delivery[]> {
+  return apiJson<Delivery[]>(
+    `/api/deliveries/?order_id=${encodeURIComponent(orderId)}`,
+    token,
+  );
+}
+
+export async function quoteDelivery(
+  token: string,
+  payload: {
+    order_id: string;
+    service_type: string;
+    dropoff_lat: number;
+    dropoff_lng: number;
+  },
+): Promise<Delivery> {
+  return apiJson<Delivery>("/api/deliveries/quotations", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function placeDelivery(token: string, deliveryId: string): Promise<Delivery> {
+  return apiJson<Delivery>("/api/deliveries/", token, {
+    method: "POST",
+    body: JSON.stringify({ delivery_id: deliveryId }),
+  });
+}
+
+export async function cancelDelivery(
+  token: string,
+  deliveryId: string,
+  reason: string,
+): Promise<Delivery> {
+  return apiJson<Delivery>(`/api/deliveries/${deliveryId}/cancel`, token, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function refreshDelivery(token: string, deliveryId: string): Promise<Delivery> {
+  return apiJson<Delivery>(`/api/deliveries/${deliveryId}/refresh`, token, {
+    method: "POST",
+  });
+}
+
 export type OrderFileCustomerInput = {
   company_name?: string;
   contact_person?: string;
