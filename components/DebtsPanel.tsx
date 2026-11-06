@@ -124,6 +124,13 @@ function daysUntilDue(dueIso: string, today: string): number | null {
   return due - now;
 }
 
+function dueCountdownLabel(remainingDays: number | null): string {
+  if (remainingDays === null) return "";
+  if (remainingDays === 0) return "Đến hạn hôm nay";
+  if (remainingDays > 0) return `Còn ${remainingDays} ngày`;
+  return `Quá hạn ${Math.abs(remainingDays)} ngày`;
+}
+
 function isOverdue(order: Order, customers: Customer[]): boolean {
   const customer = orderCustomer(order, customers);
   const dueIso = dueDateIso(order.order_date, paymentTermDays(customer));
@@ -242,6 +249,7 @@ export function DebtsPanel() {
     ? dueDateIso(selected.order_date, paymentTermDays(selectedCustomer))
     : "";
   const selectedOverdue = selected ? isOverdue(selected, customers) : false;
+  const selectedRemaining = daysUntilDue(selectedDueIso, todayIso());
   const selectedItems = selected?.items ?? [];
   const selectedTotals = selected
     ? selectedItems.reduce(
@@ -394,7 +402,7 @@ export function DebtsPanel() {
                               : "text-emerald-700 dark:text-emerald-300"
                         }`}
                       >
-                        {overdue ? "Quá hạn" : "Chưa quá hạn"}
+                        {dueCountdownLabel(remainingDays) || (overdue ? "Quá hạn" : "Chưa quá hạn")}
                       </p>
                       {items[0]?.product_name ? (
                         <p
@@ -463,7 +471,8 @@ export function DebtsPanel() {
                       : "text-emerald-700 dark:text-emerald-300"
                   }`}
                 >
-                  {selectedOverdue ? "Quá hạn" : "Chưa quá hạn"}
+                  {dueCountdownLabel(selectedRemaining) ||
+                    (selectedOverdue ? "Quá hạn" : "Chưa quá hạn")}
                 </p>
               </div>
 
