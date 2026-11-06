@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { ChevronRight, Files } from "lucide-react";
+import { ChevronRight, Files, Globe } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
@@ -617,7 +617,7 @@ export function ChatPanel() {
             <div>
               <h1 className="text-lg font-semibold tracking-tight">Trợ lý Sales</h1>
               <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-                Hỏi về dữ liệu bán hàng trong database, tài liệu đã tải, hoặc Google Sheets.
+                Hỏi về dữ liệu bán hàng, tài liệu đã tải, Google Sheets, hoặc tìm thông tin trên web.
               </p>
             </div>
             <button
@@ -649,14 +649,30 @@ export function ChatPanel() {
           {!historyReady ? (
             <p className="m-auto text-sm text-black/50 dark:text-white/50">Đang tải lịch sử...</p>
           ) : messages.length === 0 && !loading ? (
-            <div className="m-auto max-w-md text-center text-sm text-black/55 dark:text-white/55">
-              <p>
+            <div className="m-auto max-w-lg text-center">
+              <p className="text-sm text-black/55 dark:text-white/55">
                 {activeThreadId
                   ? "Cuộc trò chuyện này chưa có tin nhắn."
-                  : "Hỏi về database bán hàng, tài liệu đã tải, hoặc Google Sheets."}
+                  : "Trợ lý Sales trả lời từ các nguồn sau."}
               </p>
-              <p className="mt-2">
-                Ví dụ: “Khách nào còn công nợ?”, “Giá trong tài liệu đã tải là bao nhiêu?” hoặc “Tìm giá inox trong bảng tính”.
+              {activeThreadId ? null : (
+                <ul className="mt-4 flex flex-wrap justify-center gap-2">
+                  {["Database bán hàng", "Tài liệu đã tải", "Google Sheets"].map((item) => (
+                    <li
+                      key={item}
+                      className="rounded-full border border-black/15 px-3 py-1 text-xs font-medium dark:border-white/20"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                  <li className="inline-flex items-center gap-1.5 rounded-full border border-black/15 bg-black px-3 py-1 text-xs font-medium text-white dark:border-white/20 dark:bg-white dark:text-black">
+                    <Globe className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                    Tìm trên web
+                  </li>
+                </ul>
+              )}
+              <p className="mt-4 text-sm text-black/55 dark:text-white/55">
+                Ví dụ: “Khách nào còn công nợ?”, “Giá trong tài liệu đã tải là bao nhiêu?”, “Tìm giá inox trong bảng tính” hoặc “Giá thép hôm nay trên thị trường là bao nhiêu?”.
               </p>
             </div>
           ) : (
