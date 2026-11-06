@@ -37,6 +37,7 @@ type ItemForm = {
 type FormState = {
   customer_id: string;
   order_date: string;
+  order_time: string;
   notes: string;
   is_paid: boolean;
   is_delivered: boolean;
@@ -120,10 +121,26 @@ function newItem(overrides: Partial<ItemForm> = {}): ItemForm {
   };
 }
 
+function orderMoment(value?: string | null): { date: string; time: string } {
+  if (!value) return { date: todayIso(), time: nowTime() };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return { date: value, time: "00:00" };
+  const parts = deliveryParts(value);
+  if (!parts.date) return { date: todayIso(), time: nowTime() };
+  return parts;
+}
+
+function formatOrderMoment(value?: string | null): string {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatDate(value);
+  const parts = orderMoment(value);
+  return `${formatDate(parts.date)} ${parts.time}`;
+}
+
 function emptyForm(customerId = ""): FormState {
   return {
     customer_id: customerId,
     order_date: todayIso(),
+    order_time: nowTime(),
     notes: "",
     is_paid: false,
     is_delivered: false,
@@ -184,9 +201,11 @@ function summarizeOrder(items: MoneyLine[]) {
 
 function fromOrder(order: Order, products: Product[] = []): FormState {
   const delivery = deliveryParts(order.delivered_at);
+  const created = orderMoment(order.order_date);
   return {
     customer_id: order.customer_id ?? "",
-    order_date: (order.order_date ?? todayIso()).slice(0, 10),
+    order_date: created.date,
+    order_time: created.time,
     notes: order.notes ?? "",
     is_paid: Boolean(order.is_paid),
     is_delivered: Boolean(order.is_delivered),
@@ -229,7 +248,7 @@ function toPayload(form: FormState): OrderInput {
     .filter((item) => item.product_name);
   return {
     customer_id: form.customer_id,
-    order_date: form.order_date || null,
+    order_date: deliveryTimestamp(form.order_date || todayIso(), form.order_time || nowTime()),
     notes: form.notes,
     is_paid: Boolean(form.is_paid),
     is_delivered: Boolean(form.is_delivered),
@@ -411,6 +430,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
   const [generating, setGenerating] = useState(false);
   const [generatedFile, setGeneratedFile] = useState<GeneratedOrderFile | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
 
@@ -430,7 +450,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
         order.is_paid ? "đã thanh toán" : "chưa thanh toán",
         order.is_delivered ? "đã giao hàng" : "chưa giao hàng",
         formatDateTime(order.delivered_at),
-        formatDate(order.order_date),
+        formatOrderMoment(order.order_date),
         order.order_date,
         ...(order.items ?? []).map((item) => item.product_name),
       ]
@@ -516,6 +536,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
     setForm(emptyForm(customerFilter));
     setCatalogQuery("");
     setConfirmDelete(false);
+    setConfirmSave(false);
     setGeneratedFile(null);
   }
 
@@ -524,6 +545,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
     setSelectedId(orderId);
     setCatalogQuery("");
     setConfirmDelete(false);
+    setConfirmSave(false);
     setGeneratedFile(null);
     const listed = orders.find((order) => order.id === orderId);
     if (listed) setForm(fromOrder(listed, products));
@@ -607,23 +629,36 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
     });
   }
 
-  async function onSave(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const payload = toPayload(form);
-    if (!payload.customer_id) {
-      toast.error("Hãy chọn khách hàng.");
-      return;
-    }
-    if (payload.items.length === 0) {
-      toast.error("Đơn hàng cần ít nhất một sản phẩm.");
-      return;
-    }
+  function orderPayloadError(payload: OrderInput): string | null {
+    if (!payload.customer_id) return "Hãy chọn khách hàng.";
+    if (payload.items.length === 0) return "Đơn hàng cần ít nhất một sản phẩm.";
     if (payload.is_paid && !payload.payment_method) {
-      toast.error("Hãy chọn hình thức thanh toán trước khi đánh dấu đã thanh toán.");
+      return "Hãy chọn hình thức thanh toán trước khi đánh dấu đã thanh toán.";
+    }
+    if (payload.is_paid && payload.paid_amount <= 0) return "Nhập tổng số tiền thanh toán.";
+    return null;
+  }
+
+  function onSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const error = orderPayloadError(toPayload(form));
+    if (error) {
+      toast.error(error);
       return;
     }
-    if (payload.is_paid && payload.paid_amount <= 0) {
-      toast.error("Nhập tổng số tiền thanh toán.");
+    if (creating) {
+      void saveOrder();
+      return;
+    }
+    setConfirmSave(true);
+  }
+
+  async function saveOrder() {
+    const payload = toPayload(form);
+    const error = orderPayloadError(payload);
+    if (error) {
+      toast.error(error);
+      setConfirmSave(false);
       return;
     }
 
@@ -645,6 +680,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
         setForm(fromOrder(updated, products));
       }
       setConfirmDelete(false);
+      setConfirmSave(false);
       toast.success(
         wasCreating
           ? "Đã tạo đơn hàng thành công."
@@ -656,6 +692,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
           ? `Lưu đơn hàng thất bại. ${err.message}`
           : "Lưu đơn hàng thất bại.",
       );
+      setConfirmSave(false);
     } finally {
       setSaving(false);
     }
@@ -759,7 +796,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
   const title = creating
     ? "Đơn hàng mới"
     : selected
-      ? `${customerLabel(selectedCustomer)} · ${formatDate(selected.order_date)}`
+      ? `${customerLabel(selectedCustomer)} · ${formatOrderMoment(selected.order_date)}`
       : "Chi tiết đơn hàng";
   const totals = summarizeOrder(form.items);
 
@@ -851,7 +888,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                         <p className="truncate text-sm font-bold">{customerLabel(customer)}</p>
                         <p className="mt-0.5 truncate text-xs">
                           <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
-                            {formatDate(order.order_date)}
+                            {formatOrderMoment(order.order_date)}
                             {items.some((item) => item.vat_invoice) ? " · VAT" : ""}
                             {" · "}
                             <Banknote
@@ -943,6 +980,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                       setCreating(false);
                       setSelectedId(null);
                       setConfirmDelete(false);
+                      setConfirmSave(false);
                     }}
                     className="rounded-md border border-black/15 px-2 py-1 text-sm md:hidden dark:border-white/20"
                   >
@@ -1055,16 +1093,35 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                   resultsId="order-customer-results"
                   onSelect={(customerId) => updateField("customer_id", customerId)}
                 />
-                <label className="flex flex-col gap-1 text-sm">
-                  Ngày tạo đơn
-                  <input
-                    type="date"
-                    value={form.order_date}
-                    onChange={(event) => updateField("order_date", event.target.value)}
-                    className={inputClass}
-                    disabled={busy}
-                  />
-                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex flex-col gap-1 text-sm">
+                    Ngày tạo đơn
+                    <input
+                      type="date"
+                      value={form.order_date}
+                      onChange={(event) => {
+                        const date = event.target.value;
+                        setForm((current) => ({
+                          ...current,
+                          order_date: date,
+                          order_time: date ? current.order_time || nowTime() : "",
+                        }));
+                      }}
+                      className={inputClass}
+                      disabled={busy}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm">
+                    Giờ tạo đơn
+                    <input
+                      type="time"
+                      value={form.order_time}
+                      onChange={(event) => updateField("order_time", event.target.value)}
+                      className={inputClass}
+                      disabled={busy}
+                    />
+                  </label>
+                </div>
                 <label className="flex items-center gap-2 text-sm sm:col-span-2">
                   <input
                     type="checkbox"
@@ -1463,6 +1520,48 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
           )}
         </section>
       </div>
+
+      {confirmSave ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => {
+            if (!saving) setConfirmSave(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="save-order-title"
+            className="w-full max-w-md rounded-xl border border-black/10 bg-white p-5 shadow-lg dark:border-white/15 dark:bg-black"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 id="save-order-title" className="text-base font-semibold">
+              Lưu thông tin đơn hàng
+            </h3>
+            <p className="mt-2 text-sm text-black/70 dark:text-white/70">
+              Lưu các thay đổi của đơn hàng này?
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmSave(false)}
+                disabled={saving}
+                className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveOrder()}
+                disabled={saving}
+                className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+              >
+                {saving ? "Đang lưu..." : "Xác nhận"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -33,8 +33,18 @@ function formatPrice(value: unknown): string {
   return toNumber(value).toLocaleString("vi-VN");
 }
 
+function calendarDate(value?: string): string {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 10);
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${parsed.getFullYear()}-${month}-${day}`;
+}
+
 function formatDate(value?: string): string {
-  const iso = (value ?? "").slice(0, 10);
+  const iso = calendarDate(value);
   const [year, month, day] = iso.split("-");
   if (!year || !month || !day) return value ?? "";
   return `${day}/${month}/${year}`;
@@ -53,7 +63,7 @@ function paymentTermDays(
 }
 
 function dueDateIso(orderDate: string | undefined, days: number): string {
-  const iso = (orderDate ?? "").slice(0, 10);
+  const iso = calendarDate(orderDate);
   const [year, month, day] = iso.split("-").map(Number);
   if (!year || !month || !day) return "";
   const date = new Date(year, month - 1, day);
@@ -321,7 +331,20 @@ export function DebtsPanel() {
                       <p className="mt-0.5 truncate text-xs">
                         <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                           {formatDate(order.order_date)}
-                          {dueIso ? ` · Hạn ${formatDate(dueIso)}` : ""}
+                          {dueIso ? " · " : ""}
+                        </span>
+                        {dueIso ? (
+                          <span
+                            className={`rounded px-1 font-bold ${
+                              active
+                                ? "bg-amber-300 text-black"
+                                : "bg-amber-200 text-amber-950 dark:bg-amber-300/25 dark:text-amber-100"
+                            }`}
+                          >
+                            Hạn {formatDate(dueIso)}
+                          </span>
+                        ) : null}
+                        <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                           {" · "}
                           {items.length} SP
                           {" · "}
