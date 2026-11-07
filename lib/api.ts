@@ -1041,3 +1041,63 @@ export async function deleteDocument(
     method: "DELETE",
   });
 }
+
+export type DashboardPeriod = "day" | "week" | "month" | "year";
+
+export type DashboardPeriodTotals = Record<DashboardPeriod, number>;
+
+export type DashboardRevenuePoint = {
+  key: string;
+  revenue: number;
+  order_count: number;
+};
+
+export type DashboardCustomerRank = {
+  customer_id: string;
+  customer_code: string;
+  company_name: string;
+  contact_person: string;
+  revenue: number;
+  order_count: number;
+};
+
+export type DashboardProductRank = {
+  product_id: string | null;
+  product_code: string;
+  product_name: string;
+  unit: string;
+  quantity: number;
+  revenue: number;
+  order_count: number;
+};
+
+export type Dashboard = {
+  timezone: string;
+  period: DashboardPeriod;
+  from: string;
+  to: string;
+  ranges: Record<DashboardPeriod, { from: string; to: string }>;
+  revenue: DashboardPeriodTotals;
+  order_count: DashboardPeriodTotals;
+  new_customer_count: DashboardPeriodTotals;
+  receivable: number;
+  receivable_order_count: number;
+  revenue_series: {
+    bucket: "hour" | "day" | "month";
+    points: DashboardRevenuePoint[];
+  };
+  top_customers: DashboardCustomerRank[];
+  top_products: DashboardProductRank[];
+};
+
+export async function getDashboard(
+  token: string,
+  period: DashboardPeriod = "month",
+  limit = 5,
+): Promise<Dashboard> {
+  const params = new URLSearchParams({
+    period,
+    limit: String(limit),
+  });
+  return apiJson<Dashboard>(`/api/dashboard/?${params.toString()}`, token);
+}

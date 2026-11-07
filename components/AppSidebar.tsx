@@ -6,6 +6,7 @@ import {
   CreditCard,
   Files,
   FileText,
+  LayoutDashboard,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
@@ -31,6 +32,12 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  {
+    href: "/dashboard",
+    label: "Tổng quan",
+    icon: LayoutDashboard,
+    match: (pathname) => pathname.startsWith("/dashboard"),
+  },
   {
     href: "/chat",
     label: "Trợ lý Sales",
