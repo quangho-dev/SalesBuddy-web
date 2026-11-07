@@ -32,10 +32,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           appearance={{
             variables: {
               colorPrimary: "#1d6fe8",
-              colorText: "#0b1f3a",
+              colorForeground: "#0b1f3a",
               colorBackground: "#ffffff",
-              colorInputBackground: "#f4f7fb",
-              colorInputText: "#0b1f3a",
+              colorInput: "#f4f7fb",
+              colorInputForeground: "#0b1f3a",
             },
           }}
         >
