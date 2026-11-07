@@ -13,7 +13,7 @@ import {
 } from "@/lib/api";
 
 const inputClass =
-  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50";
+  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 dark:border-white/20 dark:focus:border-primary";
 
 const FALLBACK_DAYS = "3";
 
@@ -198,7 +198,7 @@ export function SettingsPanel() {
         <button
           type="submit"
           disabled={loading || saving}
-          className="mt-4 h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+          className="mt-4 h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
         >
           {saving ? "Đang lưu..." : "Lưu"}
         </button>
@@ -366,7 +366,7 @@ export function SettingsPanel() {
         <button
           type="submit"
           disabled={loading || savingRag}
-          className="mt-4 h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+          className="mt-4 h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
         >
           {savingRag ? "Đang lưu..." : "Lưu tìm kiếm tài liệu"}
         </button>

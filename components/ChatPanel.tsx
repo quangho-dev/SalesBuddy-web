@@ -269,7 +269,7 @@ function ThreadList({
                     onClick={() => onSelect(thread.id)}
                     className={
                       selected
-                        ? "w-full rounded-lg bg-black px-3 py-2 text-left text-white disabled:cursor-not-allowed dark:bg-white dark:text-black"
+                        ? "w-full rounded-lg bg-primary px-3 py-2 text-left text-white disabled:cursor-not-allowed dark:bg-primary dark:text-white"
                         : "w-full rounded-lg px-3 py-2 text-left hover:bg-black/5 disabled:cursor-not-allowed dark:hover:bg-white/10"
                     }
                   >
@@ -277,7 +277,7 @@ function ThreadList({
                     <span
                       className={
                         selected
-                          ? "mt-0.5 block text-xs text-white/70 dark:text-black/60"
+                          ? "mt-0.5 block text-xs text-white/70"
                           : "mt-0.5 block text-xs text-black/45 dark:text-white/45"
                       }
                     >
@@ -637,7 +637,7 @@ export function ChatPanel() {
                 type="button"
                 onClick={() => void connectSheets()}
                 disabled={connecting}
-                className="h-9 shrink-0 rounded-lg bg-black px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black"
+                className="h-9 shrink-0 rounded-lg bg-primary px-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-primary dark:text-white"
               >
                 {connecting ? "Đang mở Google..." : "Đăng nhập Google Sheets"}
               </button>
@@ -665,7 +665,7 @@ export function ChatPanel() {
                       {item}
                     </li>
                   ))}
-                  <li className="inline-flex items-center gap-1.5 rounded-full border border-black/15 bg-black px-3 py-1 text-xs font-medium text-white dark:border-white/20 dark:bg-white dark:text-black">
+                  <li className="inline-flex items-center gap-1.5 rounded-full border border-black/15 bg-primary px-3 py-1 text-xs font-medium text-white dark:border-white/20 dark:bg-primary dark:text-white">
                     <Globe className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
                     Tìm trên web
                   </li>
@@ -682,7 +682,7 @@ export function ChatPanel() {
                   key={message.id}
                   className={
                     message.role === "user"
-                      ? "ml-auto max-w-[85%] rounded-2xl bg-black px-4 py-3 text-sm text-white dark:bg-white dark:text-black"
+                      ? "ml-auto max-w-[85%] rounded-2xl bg-primary px-4 py-3 text-sm text-white dark:bg-primary dark:text-white"
                       : "mr-auto max-w-[85%] rounded-2xl border border-black/10 px-4 py-3 text-sm dark:border-white/15"
                   }
                 >
@@ -749,12 +749,12 @@ export function ChatPanel() {
                 rows={2}
                 placeholder="Nhập tin nhắn... (Enter để gửi, Shift+Enter xuống dòng)"
                 disabled={loading || !historyReady}
-                className="min-h-[44px] w-full resize-none rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50"
+                className="min-h-[44px] w-full resize-none rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 dark:border-white/20 dark:focus:border-primary"
               />
               <button
                 type="submit"
                 disabled={loading || !historyReady || input.trim().length < 2}
-                className="h-11 shrink-0 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black"
+                className="h-11 shrink-0 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-primary dark:text-white"
               >
                 {loading ? "Đang gửi..." : "Gửi"}
               </button>

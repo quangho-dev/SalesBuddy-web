@@ -54,7 +54,7 @@ const ALL_CUSTOMERS = "";
 const ALL_TYPES = "__all__";
 const UNTYPED = "__untyped__";
 const inputClass =
-  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50";
+  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 dark:border-white/20 dark:focus:border-primary";
 
 function toNumber(value: unknown): number {
   const parsed = Number(value);
@@ -371,7 +371,7 @@ function ProductSearch({
         <ul
           id={resultsId}
           role="listbox"
-          className="absolute top-full z-30 mt-1 max-h-80 w-[min(36rem,calc(100vw-2rem))] min-w-full overflow-y-auto rounded-lg border border-black/15 bg-white py-1 shadow-lg dark:border-white/20 dark:bg-zinc-950"
+          className="absolute top-full z-30 mt-1 max-h-80 w-[min(36rem,calc(100vw-2rem))] min-w-full overflow-y-auto rounded-lg border border-black/15 bg-white py-1 shadow-lg dark:border-white/20 dark:bg-navy"
         >
           {onUseCustom && value.trim() ? (
             <li>
@@ -832,7 +832,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
         <button
           type="button"
           onClick={openCreate}
-          className="h-10 shrink-0 rounded-lg bg-black px-4 text-sm font-medium text-white dark:bg-white dark:text-black"
+          className="h-10 shrink-0 rounded-lg bg-primary px-4 text-sm font-medium text-white dark:bg-primary dark:text-white"
         >
           Thêm đơn hàng
         </button>
@@ -896,7 +896,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                     <div
                       className={`rounded-lg ${
                         active
-                          ? "bg-black text-white dark:bg-white dark:text-black"
+                          ? "bg-primary text-white dark:bg-primary dark:text-white"
                           : "hover:bg-black/5 dark:hover:bg-white/10"
                       }`}
                     >
@@ -1087,7 +1087,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                     href={generatedFile.web_link}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-2 inline-flex h-9 items-center rounded-md bg-black px-3 text-sm font-medium text-white dark:bg-white dark:text-black"
+                    className="mt-2 inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-white dark:bg-primary dark:text-white"
                   >
                     Mở Google Sheet
                   </a>
@@ -1551,7 +1551,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                 <button
                   type="submit"
                   disabled={busy}
-                  className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                  className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
                 >
                   {saving ? "Đang lưu..." : creating ? "Tạo đơn hàng" : "Lưu thay đổi"}
                 </button>
@@ -1594,7 +1594,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                 type="button"
                 onClick={() => void saveOrder()}
                 disabled={saving}
-                className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
               >
                 {saving ? "Đang lưu..." : "Xác nhận"}
               </button>

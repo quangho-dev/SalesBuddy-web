@@ -28,7 +28,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="h-full min-h-full flex flex-col">
-        <ClerkProvider>
+        <ClerkProvider
+          appearance={{
+            variables: {
+              colorPrimary: "#1d6fe8",
+              colorText: "#0b1f3a",
+              colorBackground: "#ffffff",
+              colorInputBackground: "#f4f7fb",
+              colorInputText: "#0b1f3a",
+            },
+          }}
+        >
           <AppToaster />
           <Suspense fallback={null}>
             <AppShell>{children}</AppShell>

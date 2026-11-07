@@ -39,7 +39,7 @@ const EMPTY_FORM: FormState = {
 };
 
 const inputClass =
-  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50";
+  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 dark:border-white/20 dark:focus:border-primary";
 
 function customerLabel(customer: Pick<Customer, "company_name" | "contact_person">) {
   return customer.company_name.trim() || customer.contact_person.trim() || "Khách hàng chưa đặt tên";
@@ -649,7 +649,7 @@ export function CustomersPanel() {
           <button
             type="button"
             onClick={openCreate}
-            className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white dark:bg-white dark:text-black"
+            className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white dark:bg-primary dark:text-white"
           >
             Thêm khách hàng
           </button>
@@ -707,7 +707,7 @@ export function CustomersPanel() {
                       onClick={() => void openCustomer(customer.id)}
                       className={`flex w-full flex-col overflow-hidden rounded-lg border-2 text-left shadow-sm ${
                         active
-                          ? "border-black bg-black text-white shadow-black/20 dark:border-white dark:bg-white dark:text-black dark:shadow-white/20"
+                          ? "border-primary bg-primary text-white shadow-primary/25 dark:border-primary dark:bg-primary dark:text-white"
                           : "border-black/45 bg-white shadow-black/10 hover:border-black/70 dark:border-white/70 dark:bg-white/[0.04] dark:shadow-white/10 dark:hover:border-white"
                       }`}
                     >
@@ -728,7 +728,7 @@ export function CustomersPanel() {
                       <div
                         className={`min-w-0 w-full border-t px-3 py-2.5 ${
                           active
-                            ? "border-white/20 bg-white/10 dark:border-black/10 dark:bg-black/5"
+                            ? "border-white/20 bg-white/10"
                             : "border-black/10 bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.04]"
                         }`}
                       >
@@ -746,7 +746,7 @@ export function CustomersPanel() {
                                 key={item.id ?? `${item.content}-${index}`}
                                 className={`rounded-md px-2 py-1.5 ${
                                   active
-                                    ? "bg-white/15 dark:bg-black/10"
+                                    ? "bg-white/15"
                                     : "bg-white dark:bg-black/20"
                                 }`}
                               >
@@ -979,7 +979,7 @@ export function CustomersPanel() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                  className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
                 >
                   {saving ? "Đang lưu..." : creating ? "Tạo khách hàng" : "Lưu thay đổi"}
                 </button>
@@ -1040,7 +1040,7 @@ export function CustomersPanel() {
                 type="button"
                 onClick={() => void saveCustomer()}
                 disabled={saving}
-                className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
               >
                 {saving ? "Đang lưu..." : "Xác nhận"}
               </button>

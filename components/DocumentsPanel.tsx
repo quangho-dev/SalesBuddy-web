@@ -224,7 +224,7 @@ export function DocumentsPanel() {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+            className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
           >
             {uploading ? "Đang tải..." : "Tải tài liệu"}
           </button>

@@ -47,7 +47,7 @@ const ALL_TYPES = "__all__";
 const UNTYPED = "__untyped__";
 const VAT_RATE = 0.1;
 const inputClass =
-  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50";
+  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 dark:border-white/20 dark:focus:border-primary";
 
 type MoneyLine = {
   quantity: unknown;
@@ -352,7 +352,7 @@ function ProductSearch({
         <ul
           id={resultsId}
           role="listbox"
-          className="absolute top-full z-30 mt-1 max-h-80 w-[min(36rem,calc(100vw-2rem))] min-w-full overflow-y-auto rounded-lg border border-black/15 bg-white py-1 shadow-lg dark:border-white/20 dark:bg-zinc-950"
+          className="absolute top-full z-30 mt-1 max-h-80 w-[min(36rem,calc(100vw-2rem))] min-w-full overflow-y-auto rounded-lg border border-black/15 bg-white py-1 shadow-lg dark:border-white/20 dark:bg-navy"
         >
           {onUseCustom && value.trim() ? (
             <li>
@@ -931,7 +931,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
         <button
           type="button"
           onClick={openCreate}
-          className="h-10 shrink-0 rounded-lg bg-black px-4 text-sm font-medium text-white dark:bg-white dark:text-black"
+          className="h-10 shrink-0 rounded-lg bg-primary px-4 text-sm font-medium text-white dark:bg-primary dark:text-white"
         >
           Thêm báo giá
         </button>
@@ -1014,7 +1014,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                     <div
                       className={`rounded-lg ${
                         active
-                          ? "bg-black text-white dark:bg-white dark:text-black"
+                          ? "bg-primary text-white dark:bg-primary dark:text-white"
                           : "hover:bg-black/5 dark:hover:bg-white/10"
                       }`}
                     >
@@ -1194,7 +1194,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                     aria-pressed={currentStatus === "unset"}
                     className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-4 text-sm font-medium disabled:opacity-50 ${
                       currentStatus === "unset"
-                        ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                        ? "border-primary bg-primary text-white dark:border-primary dark:bg-primary dark:text-white"
                         : "border-black/15 dark:border-white/20"
                     }`}
                   >
@@ -1530,7 +1530,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                 <button
                   type="submit"
                   disabled={busy}
-                  className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                  className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
                 >
                   {saving ? "Đang lưu..." : creating ? "Tạo báo giá" : "Lưu thay đổi"}
                 </button>

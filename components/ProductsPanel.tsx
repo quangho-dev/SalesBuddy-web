@@ -41,7 +41,7 @@ const ALL_TYPES = "__all__";
 const UNTYPED = "__untyped__";
 
 const inputClass =
-  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50";
+  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 dark:border-white/20 dark:focus:border-primary";
 
 function toNumber(value: unknown): number {
   const parsed = Number(value);
@@ -394,7 +394,7 @@ export function ProductsPanel() {
           <button
             type="button"
             onClick={openCreate}
-            className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white dark:bg-white dark:text-black"
+            className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white dark:bg-primary dark:text-white"
           >
             Thêm sản phẩm
           </button>
@@ -472,7 +472,7 @@ export function ProductsPanel() {
                       onClick={() => void openProduct(product.id)}
                       className={`w-full rounded-lg px-3 py-3 text-left ${
                         active
-                          ? "bg-black text-white dark:bg-white dark:text-black"
+                          ? "bg-primary text-white dark:bg-primary dark:text-white"
                           : "hover:bg-black/5 dark:hover:bg-white/10"
                       }`}
                     >
@@ -653,7 +653,7 @@ export function ProductsPanel() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="h-10 rounded-lg bg-black px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                  className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
                 >
                   {saving ? "Đang lưu..." : creating ? "Tạo sản phẩm" : "Lưu thay đổi"}
                 </button>

@@ -140,8 +140,8 @@ function RevenueChart({
                   <span
                     className={`block w-full rounded-t ${
                       selected
-                        ? "bg-black dark:bg-white"
-                        : "bg-black/70 hover:bg-black dark:bg-white/70 dark:hover:bg-white"
+                        ? "bg-primary"
+                        : "bg-primary/70 hover:bg-primary"
                     }`}
                     style={{ height: `${height}%`, minHeight: point.revenue > 0 ? 3 : 0 }}
                   />
@@ -248,7 +248,7 @@ export function DashboardPanel() {
                     aria-pressed={selected}
                     className={`rounded-xl border px-4 py-3 text-left ${
                       selected
-                        ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                        ? "border-primary bg-primary text-white dark:border-primary dark:bg-primary dark:text-white"
                         : "border-black/10 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10"
                     }`}
                   >

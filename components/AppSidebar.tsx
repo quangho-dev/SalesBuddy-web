@@ -93,8 +93,8 @@ function navItemClass(active: boolean, collapsed: boolean) {
     "flex items-center rounded-lg py-2 text-sm",
     collapsed ? "justify-center px-2" : "gap-2.5 px-3",
     active
-      ? "bg-black text-white dark:bg-white dark:text-black"
-      : "text-black/80 hover:bg-black/5 dark:text-white/80 dark:hover:bg-white/10",
+      ? "bg-primary text-white"
+      : "text-white/80 hover:bg-white/10",
   ].join(" ");
 }
 
@@ -107,12 +107,12 @@ export function AppSidebar({
 
   return (
     <aside
-      className={`flex h-full shrink-0 flex-col border-r border-black/10 bg-black/2 transition-[width] duration-200 dark:border-white/10 dark:bg-white/3 ${
+      className={`flex h-full shrink-0 flex-col border-r border-white/10 bg-navy text-white transition-[width] duration-200 ${
         collapsed ? "w-16" : "w-64"
       }`}
     >
       <div
-        className={`flex items-center border-b border-black/10 dark:border-white/10 ${
+        className={`flex items-center border-b border-white/10 ${
           collapsed ? "justify-center px-2 py-3" : "justify-between gap-2 px-4 py-4"
         }`}
       >
@@ -131,7 +131,7 @@ export function AppSidebar({
             onClick={onToggleCollapsed}
             aria-label={collapsed ? "Mở rộng menu" : "Thu gọn menu"}
             title={collapsed ? "Mở rộng menu" : "Thu gọn menu"}
-            className="rounded-md p-1.5 text-black/70 hover:bg-black/5 dark:text-white/70 dark:hover:bg-white/10"
+            className="rounded-md p-1.5 text-white/70 hover:bg-white/10"
           >
             {collapsed ? (
               <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
@@ -162,7 +162,7 @@ export function AppSidebar({
       </nav>
 
       <div
-        className={`border-t border-black/10 py-3 dark:border-white/10 ${
+        className={`border-t border-white/10 py-3 ${
           collapsed ? "flex justify-center px-2" : "px-4"
         }`}
       >

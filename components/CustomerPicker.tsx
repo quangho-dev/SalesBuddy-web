@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createCustomer, getSettings, type Customer } from "@/lib/api";
 
 const inputClass =
-  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50";
+  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 dark:border-white/20 dark:focus:border-primary";
 
 const EMPTY_NEW = {
   company_name: "",
@@ -337,7 +337,7 @@ export function CustomerPicker({
               type="button"
               onClick={() => void submitNewCustomer()}
               disabled={saving}
-              className="h-9 rounded-lg bg-black px-3 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
             >
               {saving ? "Đang tạo..." : "Tạo và chọn"}
             </button>
@@ -349,7 +349,7 @@ export function CustomerPicker({
         <ul
           id={resultsId}
           role="listbox"
-          className="absolute top-full z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-black/15 bg-white py-1 shadow-lg dark:border-white/20 dark:bg-zinc-950"
+          className="absolute top-full z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-black/15 bg-white py-1 shadow-lg dark:border-white/20 dark:bg-navy"
         >
           {allowCreate ? (
             <li>
@@ -379,7 +379,7 @@ export function CustomerPicker({
                     onClick={() => pick(customer)}
                     className={`flex w-full flex-col px-3 py-2 text-left ${
                       active
-                        ? "bg-black text-white dark:bg-white dark:text-black"
+                        ? "bg-primary text-white dark:bg-primary dark:text-white"
                         : "hover:bg-black/5 dark:hover:bg-white/10"
                     }`}
                   >
