@@ -131,6 +131,17 @@ function dueCountdownLabel(remainingDays: number | null): string {
   return `Quá hạn ${Math.abs(remainingDays)} ngày`;
 }
 
+function countdownClass(overdue: boolean, active = false): string {
+  const tone = overdue
+    ? active
+      ? "bg-red-200 text-red-950"
+      : "bg-red-100 text-red-800 dark:bg-red-400/25 dark:text-red-100"
+    : active
+      ? "bg-emerald-200 text-emerald-950"
+      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-400/25 dark:text-emerald-100";
+  return `mt-1 inline-block rounded px-1.5 py-0.5 text-xs font-bold ${tone}`;
+}
+
 function isOverdue(order: Order, customers: Customer[]): boolean {
   const customer = orderCustomer(order, customers);
   const dueIso = dueDateIso(order.order_date, paymentTermDays(customer));
@@ -374,15 +385,7 @@ export function DebtsPanel() {
                           {dueIso ? " · " : ""}
                         </span>
                         {dueIso ? (
-                          <span
-                            className={`rounded px-1 font-bold ${
-                              active
-                                ? "bg-amber-300 text-black"
-                                : "bg-amber-200 text-amber-950 dark:bg-amber-300/25 dark:text-amber-100"
-                            }`}
-                          >
-                            Hạn {formatDate(dueIso)}
-                          </span>
+                          <span className="font-bold">Hạn {formatDate(dueIso)}</span>
                         ) : null}
                         <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                           {" · "}
@@ -391,17 +394,7 @@ export function DebtsPanel() {
                         </span>
                         <span className="font-bold">{formatPrice(orderRemaining(order))}đ</span>
                       </p>
-                      <p
-                        className={`mt-1 text-xs font-medium ${
-                          overdue
-                            ? active
-                              ? "text-red-200"
-                              : "text-red-700 dark:text-red-300"
-                            : active
-                              ? "opacity-80"
-                              : "text-emerald-700 dark:text-emerald-300"
-                        }`}
-                      >
+                      <p className={countdownClass(overdue, active)}>
                         {dueCountdownLabel(remainingDays) || (overdue ? "Quá hạn" : "Chưa quá hạn")}
                       </p>
                       {items[0]?.product_name ? (
@@ -462,15 +455,16 @@ export function DebtsPanel() {
                 ) : null}
                 <p className="mt-1 text-xs text-black/60 dark:text-white/60">
                   Hạn công nợ: {paymentTermDays(selectedCustomer)} ngày kể từ ngày tạo đơn
-                  {selectedDueIso ? ` · Hạn thanh toán ${formatDate(selectedDueIso)}` : ""}
+                  {selectedDueIso ? (
+                    <>
+                      {" · "}
+                      <span className="font-bold text-black dark:text-white">
+                        Hạn thanh toán {formatDate(selectedDueIso)}
+                      </span>
+                    </>
+                  ) : null}
                 </p>
-                <p
-                  className={`mt-1 text-xs font-medium ${
-                    selectedOverdue
-                      ? "text-red-700 dark:text-red-300"
-                      : "text-emerald-700 dark:text-emerald-300"
-                  }`}
-                >
+                <p className={countdownClass(selectedOverdue)}>
                   {dueCountdownLabel(selectedRemaining) ||
                     (selectedOverdue ? "Quá hạn" : "Chưa quá hạn")}
                 </p>
