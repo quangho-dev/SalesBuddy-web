@@ -40,7 +40,7 @@ const navItems: NavItem[] = [
   },
   {
     href: "/chat",
-    label: "Trợ lý Sales",
+    label: "Trợ Lý Sales",
     icon: Bot,
     match: (pathname) => pathname === "/chat",
   },
@@ -122,7 +122,7 @@ export function AppSidebar({
             onClick={onNavigate}
             className="text-sm font-semibold tracking-tight"
           >
-            Sales Buddy
+            Trợ Lý Sales
           </Link>
         )}
         {onToggleCollapsed ? (

@@ -205,7 +205,7 @@ export function DocumentsPanel() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Tài liệu</h1>
           <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-            Tải PDF, Word, PowerPoint, TXT hoặc Markdown. File được embed để Trợ lý Sales đọc.
+            Tải PDF, Word, PowerPoint, TXT hoặc Markdown. File được embed để Trợ Lý Sales đọc.
           </p>
         </div>
         <div className="shrink-0">

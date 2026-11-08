@@ -210,7 +210,7 @@ export function SettingsPanel() {
       >
         <h2 className="text-base font-semibold">Tìm kiếm tài liệu</h2>
         <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-          Áp dụng khi Trợ lý Sales trả lời từ các tài liệu đã tải.
+          Áp dụng khi Trợ Lý Sales trả lời từ các tài liệu đã tải.
         </p>
 
         <label className="mt-4 flex flex-col gap-1 text-sm" htmlFor="rag-strategy">

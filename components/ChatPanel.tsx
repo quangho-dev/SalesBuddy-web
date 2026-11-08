@@ -615,7 +615,7 @@ export function ChatPanel() {
         <header className="border-b border-black/10 px-6 py-4 dark:border-white/10">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h1 className="text-lg font-semibold tracking-tight">Trợ lý Sales</h1>
+              <h1 className="text-lg font-semibold tracking-tight">Trợ Lý Sales</h1>
               <p className="mt-1 text-sm text-black/60 dark:text-white/60">
                 Hỏi về dữ liệu bán hàng, tài liệu đã tải, Google Sheets, hoặc tìm thông tin trên web.
               </p>
@@ -653,7 +653,7 @@ export function ChatPanel() {
               <p className="text-sm text-black/55 dark:text-white/55">
                 {activeThreadId
                   ? "Cuộc trò chuyện này chưa có tin nhắn."
-                  : "Trợ lý Sales trả lời từ các nguồn sau."}
+                  : "Trợ Lý Sales trả lời từ các nguồn sau."}
               </p>
               {activeThreadId ? null : (
                 <ul className="mt-4 flex flex-wrap justify-center gap-2">

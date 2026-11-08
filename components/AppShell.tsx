@@ -52,7 +52,7 @@ function SignedInShell({ children }: { children: React.ReactNode }) {
           >
             Menu
           </button>
-          <span className="text-sm font-semibold tracking-tight">Sales Buddy</span>
+          <span className="text-sm font-semibold tracking-tight">Trợ Lý Sales</span>
         </div>
         {children}
       </div>
@@ -77,7 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <>
           <header className="flex items-center justify-between gap-3 border-b border-black/10 px-6 py-3 dark:border-white/10">
             <a href="/" className="text-sm font-semibold tracking-tight">
-              Sales Buddy
+              Trợ Lý Sales
             </a>
             <div className="flex items-center gap-3">
               <SignInButton />
