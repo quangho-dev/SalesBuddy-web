@@ -118,6 +118,7 @@ export type Order = {
   id: string;
   clerk_id: string;
   customer_id: string;
+  order_code?: string;
   order_date: string;
   notes: string;
   is_paid: boolean;

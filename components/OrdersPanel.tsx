@@ -283,7 +283,9 @@ function itemLabel(item: { product_code?: string | null; product_name?: string |
 function matchesProductSearch(product: Product, needle: string) {
   const query = needle.trim().toLowerCase();
   if (!query) return true;
-  return product.name.toLowerCase().includes(query);
+  const name = product.name.toLowerCase();
+  const code = product.product_code.trim().toLowerCase();
+  return name.includes(query) || (code.length > 0 && code.includes(query));
 }
 
 function ProductSearch({
@@ -394,7 +396,7 @@ function ProductSearch({
           ) : null}
           {matches.length === 0 ? (
             <li className="px-3 py-2 text-sm text-black/55 dark:text-white/55">
-              Không có sản phẩm cùng tên trong kho.
+              Không có sản phẩm cùng tên hoặc mã hàng trong kho.
             </li>
           ) : (
             matches.map((product) => (
@@ -467,6 +469,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
         order.is_paid ? "đã thanh toán" : "chưa thanh toán",
         order.is_delivered ? "đã giao hàng" : "chưa giao hàng",
         formatDateTime(order.delivered_at),
+        order.order_code,
         formatOrderMoment(order.order_date),
         order.order_date,
         ...(order.items ?? []).flatMap((item) => [item.product_code, item.product_name]),
@@ -816,7 +819,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
   const title = creating
     ? "Đơn hàng mới"
     : selected
-      ? `${customerLabel(selectedCustomer)} · ${formatOrderMoment(selected.order_date)}`
+      ? `${selected.order_code?.trim() ? `${selected.order_code.trim()} · ` : ""}${customerLabel(selectedCustomer)} · ${formatOrderMoment(selected.order_date)}`
       : "Chi tiết đơn hàng";
   const totals = summarizeOrder(form.items);
 
@@ -867,7 +870,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
               id="order-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm khách, sản phẩm, ghi chú..."
+              placeholder="Tìm mã đơn, khách, sản phẩm, ghi chú..."
               className={inputClass}
             />
           </div>
@@ -905,7 +908,10 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                         onClick={() => void openOrder(order.id)}
                         className="w-full px-3 py-3 text-left"
                       >
-                        <p className="truncate text-sm font-bold">{customerLabel(customer)}</p>
+                        <p className="truncate text-sm font-bold">
+                          {order.order_code?.trim() ? `${order.order_code.trim()} · ` : ""}
+                          {customerLabel(customer)}
+                        </p>
                         <p className="mt-0.5 truncate text-xs">
                           <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                             {formatOrderMoment(order.order_date)}
@@ -1285,13 +1291,13 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                         </label>
                         <div className="w-64">
                           <label htmlFor="order-catalog-search" className="sr-only">
-                            Tìm sản phẩm theo tên
+                            Tìm sản phẩm theo tên hoặc mã hàng
                           </label>
                           <ProductSearch
                             products={catalogProducts}
                             value={catalogQuery}
                             disabled={busy}
-                            placeholder="Tìm sản phẩm theo tên"
+                            placeholder="Tìm theo tên hoặc mã hàng"
                             inputId="order-catalog-search"
                             resultsId="order-catalog-results"
                             onQueryChange={setCatalogQuery}
@@ -1378,7 +1384,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                               value={item.product_name}
                               disabled={busy}
                               multiline
-                              placeholder="Tìm hoặc gõ tên hàng"
+                              placeholder="Tìm theo tên, mã hàng hoặc gõ hàng ngoài kho"
                               inputId={`order-item-name-${item.key}`}
                               resultsId={`order-item-results-${item.key}`}
                               onQueryChange={(value) => {
