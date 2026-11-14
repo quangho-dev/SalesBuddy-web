@@ -652,6 +652,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
 
     setSaving(true);
     setError(null);
+    const wasCreating = creating;
     try {
       const token = await withToken();
       if (creating) {
@@ -668,8 +669,15 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
         setForm(fromQuote(updated, products));
       }
       setConfirmDelete(false);
+      toast.success(
+        wasCreating
+          ? "Đã tạo báo giá thành công."
+          : "Đã lưu thay đổi báo giá thành công.",
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không lưu được báo giá.");
+      const message = err instanceof Error ? err.message : "Không lưu được báo giá.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
