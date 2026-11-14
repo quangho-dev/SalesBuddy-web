@@ -9,6 +9,7 @@ import { CustomerPicker, customerLabel } from "@/components/CustomerPicker";
 import {
   createOrder,
   deleteOrder,
+  downloadOrdersExport,
   generateOrderFile,
   getOrder,
   listCustomers,
@@ -446,6 +447,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatedFile, setGeneratedFile] = useState<GeneratedOrderFile | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -812,6 +814,20 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
     }
   }
 
+  async function onExportOrders() {
+    setExporting(true);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Bạn cần đăng nhập để xuất Excel.");
+      await downloadOrdersExport(token);
+      toast.success("Đã xuất danh sách đơn hàng.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Không xuất được file Excel.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const showEditor = creating || selectedId !== null;
   const selectedCustomer = selected ? orderCustomer(selected, customers) : null;
   const busy = saving || generating;
@@ -819,7 +835,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
   const title = creating
     ? "Đơn hàng mới"
     : selected
-      ? `${selected.order_code?.trim() ? `${selected.order_code.trim()} · ` : ""}${customerLabel(selectedCustomer)} · ${formatOrderMoment(selected.order_date)}`
+      ? `${customerLabel(selectedCustomer)} · ${formatOrderMoment(selected.order_date)}`
       : "Chi tiết đơn hàng";
   const totals = summarizeOrder(form.items);
 
@@ -832,13 +848,23 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
             Tạo đơn theo khách hàng, nhiều sản phẩm, giá bán, VAT và file Google Sheet từ mẫu don-hang.xls.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="h-10 shrink-0 rounded-lg bg-primary px-4 text-sm font-medium text-white dark:bg-primary dark:text-white"
-        >
-          Thêm đơn hàng
-        </button>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => void onExportOrders()}
+            disabled={busy || exporting}
+            className="h-10 rounded-lg border border-black/15 px-4 text-sm disabled:opacity-50 dark:border-white/20"
+          >
+            {exporting ? "Đang xuất..." : "Xuất Excel"}
+          </button>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white dark:bg-primary dark:text-white"
+          >
+            Thêm đơn hàng
+          </button>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -908,10 +934,20 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                         onClick={() => void openOrder(order.id)}
                         className="w-full px-3 py-3 text-left"
                       >
-                        <p className="truncate text-sm font-bold">
-                          {order.order_code?.trim() ? `${order.order_code.trim()} · ` : ""}
-                          {customerLabel(customer)}
-                        </p>
+                        <p className="truncate text-sm font-bold">{customerLabel(customer)}</p>
+                        {order.order_code?.trim() ? (
+                          <p className="mt-1">
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-xs font-bold ${
+                                active
+                                  ? "bg-white/20 text-white"
+                                  : "bg-primary/10 text-primary"
+                              }`}
+                            >
+                              {order.order_code.trim()}
+                            </span>
+                          </p>
+                        ) : null}
                         <p className="mt-0.5 truncate text-xs">
                           <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                             {formatOrderMoment(order.order_date)}
@@ -1014,6 +1050,11 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                   </button>
                   <div className="min-w-0">
                     <h2 className="truncate text-base font-semibold tracking-tight">{title}</h2>
+                    {!creating && selected?.order_code?.trim() ? (
+                      <p className="mt-1 text-sm font-bold text-primary">
+                        Mã đơn {selected.order_code.trim()}
+                      </p>
+                    ) : null}
                     {!creating && orderQuoteHref(selected?.quote_id) ? (
                       <Link
                         href={orderQuoteHref(selected?.quote_id)}
