@@ -27,6 +27,7 @@ import {
 
 type ItemForm = {
   key: string;
+  product_code: string;
   product_name: string;
   unit: string;
   quantity: string;
@@ -74,6 +75,7 @@ function formatWhen(value?: string) {
 function newItem(overrides: Partial<ItemForm> = {}): ItemForm {
   return {
     key: crypto.randomUUID(),
+    product_code: "",
     product_name: "",
     unit: "",
     quantity: "1",
@@ -219,28 +221,61 @@ function quoteLabel(quote: Quote) {
   return "Báo giá chưa đặt tên";
 }
 
+function catalogProduct(
+  item: { product_name?: string | null; unit?: string | null },
+  products: Product[],
+) {
+  const name = (item.product_name ?? "").trim().toLowerCase();
+  if (!name) return null;
+  const named = products.filter((product) => product.name.trim().toLowerCase() === name);
+  if (named.length === 0) return null;
+  const unit = (item.unit ?? "").trim().toLowerCase();
+  if (unit) {
+    const sameUnit = named.find((product) => product.unit.trim().toLowerCase() === unit);
+    if (sameUnit) return sameUnit;
+  }
+  return named[0];
+}
+
+function itemProductCode(
+  item: { product_code?: string | null; product_name?: string | null; unit?: string | null },
+  products: Product[],
+) {
+  const stored = (item.product_code ?? "").trim();
+  if (stored) return stored;
+  return catalogProduct(item, products)?.product_code.trim() ?? "";
+}
+
+function itemLabel(
+  item: { product_code?: string | null; product_name?: string | null; unit?: string | null },
+  products: Product[],
+) {
+  const name = (item.product_name ?? "").trim();
+  if (!name) return "";
+  const code = itemProductCode(item, products);
+  return code ? `${code} · ${name}` : name;
+}
+
 function fromQuote(quote: Quote, products: Product[] = []): FormState {
   return {
     customer_id: quote.customer_id ?? "",
     notes: quote.notes ?? "",
     items:
       quote.items?.length > 0
-        ? quote.items.map((item) =>
-            newItem({
+        ? quote.items.map((item) => {
+            const matched = catalogProduct(item, products);
+            return newItem({
               key: item.id || crypto.randomUUID(),
+              product_code: matched?.product_code ?? "",
               product_name: item.product_name ?? "",
               unit: item.unit ?? "",
               quantity: String(toNumber(item.quantity)),
               selling_price: String(toNumber(item.selling_price)),
               vat_invoice: Boolean(item.vat_invoice),
               notes: item.notes ?? "",
-              custom: !products.some(
-                (product) =>
-                  product.name.trim().toLowerCase() ===
-                  (item.product_name ?? "").trim().toLowerCase(),
-              ),
-            }),
-          )
+              custom: !matched,
+            });
+          })
         : [newItem()],
   };
 }
@@ -269,7 +304,9 @@ function productLabel(product: Product) {
 function matchesProductSearch(product: Product, needle: string) {
   const query = needle.trim().toLowerCase();
   if (!query) return true;
-  return product.name.toLowerCase().includes(query);
+  const name = product.name.toLowerCase();
+  const code = product.product_code.trim().toLowerCase();
+  return name.includes(query) || (code.length > 0 && code.includes(query));
 }
 
 function ProductSearch({
@@ -375,7 +412,7 @@ function ProductSearch({
           ) : null}
           {matches.length === 0 ? (
             <li className="px-3 py-2 text-sm text-black/55 dark:text-white/55">
-              Không có sản phẩm cùng tên trong kho.
+              Không có sản phẩm cùng tên hoặc mã hàng trong kho.
             </li>
           ) : (
             matches.map((product) => (
@@ -460,13 +497,16 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
         customer?.phone_number ?? "",
         quote.notes,
         formatWhen(quote.created_at),
-        ...(quote.items ?? []).map((item) => item.product_name),
+        ...(quote.items ?? []).flatMap((item) => [
+          item.product_name,
+          itemProductCode(item, products),
+        ]),
       ]
         .join(" ")
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [customerFilter, customers, query, quotes, statusFilter]);
+  }, [customerFilter, customers, products, query, quotes, statusFilter]);
 
   const productTypes = useMemo(() => {
     const names = new Set<string>();
@@ -622,6 +662,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
   function addFromCatalog(product: Product) {
     setCatalogQuery("");
     const filled = newItem({
+      product_code: product.product_code,
       product_name: product.name,
       unit: product.unit,
       selling_price: String(toNumber(product.selling_price)),
@@ -993,7 +1034,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
               id="quote-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm khách, ghi chú, sản phẩm..."
+              placeholder="Tìm khách, ghi chú, sản phẩm, mã hàng..."
               className={inputClass}
             />
           </div>
@@ -1052,7 +1093,10 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                               active ? "opacity-80" : "text-black/55 dark:text-white/55"
                             }`}
                           >
-                            {items.map((item) => item.product_name).filter(Boolean).join(", ")}
+                            {items
+                              .map((item) => itemLabel(item, products))
+                              .filter(Boolean)
+                              .join(", ")}
                           </p>
                         ) : null}
                       </button>
@@ -1310,7 +1354,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                             products={catalogProducts}
                             value={catalogQuery}
                             disabled={busy}
-                            placeholder="Tìm sản phẩm theo tên"
+                            placeholder="Tìm theo tên hoặc mã hàng"
                             inputId="quote-catalog-search"
                             resultsId="quote-catalog-results"
                             onQueryChange={setCatalogQuery}
@@ -1357,6 +1401,11 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                         <p className="text-xs font-medium text-black/60 dark:text-white/60">
                           Dòng {index + 1}
                           {item.custom ? " · Hàng ngoài kho" : ""}
+                          {item.product_code.trim() ? (
+                            <span className="ml-2 font-semibold text-black dark:text-white">
+                              Mã {item.product_code.trim()}
+                            </span>
+                          ) : null}
                         </p>
                         <button
                           type="button"
@@ -1392,12 +1441,19 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                               value={item.product_name}
                               disabled={busy}
                               multiline
-                              placeholder="Tìm hoặc gõ tên hàng"
+                              placeholder="Tìm theo tên, mã hàng hoặc gõ hàng ngoài kho"
                               inputId={`quote-item-name-${item.key}`}
                               resultsId={`quote-item-results-${item.key}`}
-                              onQueryChange={(value) =>
-                                updateItem(item.key, "product_name", value)
-                              }
+                              onQueryChange={(value) => {
+                                setForm((current) => ({
+                                  ...current,
+                                  items: current.items.map((row) =>
+                                    row.key === item.key
+                                      ? { ...row, product_name: value, product_code: "" }
+                                      : row,
+                                  ),
+                                }));
+                              }}
                               onPick={(product) => {
                                 setForm((current) => ({
                                   ...current,
@@ -1405,6 +1461,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                                     row.key === item.key
                                       ? {
                                           ...row,
+                                          product_code: product.product_code,
                                           product_name: product.name,
                                           unit: product.unit,
                                           selling_price: String(toNumber(product.selling_price)),
@@ -1419,7 +1476,12 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                                   ...current,
                                   items: current.items.map((row) =>
                                     row.key === item.key
-                                      ? { ...row, product_name: name, custom: true }
+                                      ? {
+                                          ...row,
+                                          product_code: "",
+                                          product_name: name,
+                                          custom: true,
+                                        }
                                       : row,
                                   ),
                                 }));
