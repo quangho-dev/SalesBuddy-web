@@ -734,6 +734,34 @@ export async function downloadProductsExport(token: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export type Organization = {
+  id: string;
+  name: string;
+  address: string;
+  tax_code: string;
+};
+
+export type CurrentUser = {
+  clerk_id: string;
+  role: "sales_representative" | "sales_supervisor";
+  organization_id: string | null;
+  organization: Organization | null;
+};
+
+export async function getCurrentUser(token: string): Promise<CurrentUser> {
+  return apiJson<CurrentUser>("/api/user/me", token);
+}
+
+export async function joinOrganization(
+  token: string,
+  payload: { name: string; tax_code: string },
+): Promise<CurrentUser> {
+  return apiJson<CurrentUser>("/api/user/organization", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function downloadOrdersExport(token: string): Promise<void> {
   const response = await fetch(`${API_URL}/api/orders/export`, {
     headers: { Authorization: `Bearer ${token}` },

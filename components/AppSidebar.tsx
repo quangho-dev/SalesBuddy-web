@@ -1,6 +1,7 @@
 "use client";
 
 import { UserButton } from "@clerk/nextjs";
+import { UserGreeting } from "@/components/UserGreeting";
 import {
   Bot,
   CreditCard,
@@ -166,7 +167,14 @@ export function AppSidebar({
           collapsed ? "flex justify-center px-2" : "px-4"
         }`}
       >
-        <UserButton />
+        {collapsed ? (
+          <UserButton />
+        ) : (
+          <div className="flex min-w-0 items-start gap-2">
+            <UserButton />
+            <UserGreeting variant="sidebar" />
+          </div>
+        )}
       </div>
     </aside>
   );
