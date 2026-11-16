@@ -339,6 +339,23 @@ export async function listChatThreads(token: string): Promise<ChatThread[]> {
   return payload.threads ?? [];
 }
 
+export async function renameChatThread(
+  token: string,
+  threadId: string,
+  title: string,
+): Promise<ChatThread> {
+  return apiJson<ChatThread>(`/api/chat/threads/${threadId}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
+}
+
+export async function deleteChatThread(token: string, threadId: string): Promise<void> {
+  await apiJson<{ deleted: boolean }>(`/api/chat/threads/${threadId}`, token, {
+    method: "DELETE",
+  });
+}
+
 export async function listChatMessages(
   token: string,
   threadId: string,
