@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { ChevronRight, Files, Globe } from "lucide-react";
+import { ChevronRight, Files, Globe, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
@@ -11,9 +11,11 @@ import {
   SalesDocument,
   connectGoogleSheets,
   getGoogleSheetsStatus,
+  deleteChatThread,
   listChatMessages,
   listChatThreads,
   listDocuments,
+  renameChatThread,
   sendChatMessage,
 } from "@/lib/api";
 
@@ -233,13 +235,70 @@ function ThreadList({
   disabled,
   onCreate,
   onSelect,
+  onRename,
+  onDelete,
 }: {
   threads: ChatThread[];
   activeThreadId: string | null;
   disabled: boolean;
   onCreate: () => void;
   onSelect: (threadId: string) => void;
+  onRename: (threadId: string, title: string) => Promise<void>;
+  onDelete: (threadId: string) => Promise<void>;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [savingTitle, setSavingTitle] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function startRename(thread: ChatThread) {
+    setConfirmDeleteId(null);
+    setEditingId(thread.id);
+    setDraft(thread.title);
+    setRenameError(null);
+  }
+
+  async function removeThread(threadId: string) {
+    setDeletingId(threadId);
+    setRenameError(null);
+    try {
+      await onDelete(threadId);
+      setConfirmDeleteId(null);
+      if (editingId === threadId) cancelRename();
+    } catch (err) {
+      setRenameError(err instanceof Error ? err.message : "Không xóa được cuộc trò chuyện.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function cancelRename() {
+    setEditingId(null);
+    setDraft("");
+    setRenameError(null);
+  }
+
+  async function saveRename(threadId: string) {
+    const title = draft.trim();
+    if (!title) {
+      setRenameError("Hãy nhập tiêu đề.");
+      return;
+    }
+    setSavingTitle(true);
+    setRenameError(null);
+    try {
+      await onRename(threadId, title);
+      setEditingId(null);
+      setDraft("");
+    } catch (err) {
+      setRenameError(err instanceof Error ? err.message : "Không đổi được tiêu đề.");
+    } finally {
+      setSavingTitle(false);
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-black/10 px-3 py-3 dark:border-white/10">
@@ -263,27 +322,137 @@ function ThreadList({
               const selected = thread.id === activeThreadId;
               return (
                 <li key={thread.id}>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => onSelect(thread.id)}
+                  <div
                     className={
                       selected
-                        ? "w-full rounded-lg bg-primary px-3 py-2 text-left text-white disabled:cursor-not-allowed dark:bg-primary dark:text-white"
-                        : "w-full rounded-lg px-3 py-2 text-left hover:bg-black/5 disabled:cursor-not-allowed dark:hover:bg-white/10"
+                        ? "rounded-lg bg-primary px-3 py-2 text-white dark:bg-primary dark:text-white"
+                        : "rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10"
                     }
                   >
-                    <span className="block truncate text-sm font-medium">{thread.title}</span>
-                    <span
-                      className={
-                        selected
-                          ? "mt-0.5 block text-xs text-white/70"
-                          : "mt-0.5 block text-xs text-black/45 dark:text-white/45"
-                      }
-                    >
-                      {formatThreadTime(thread.updated_at)}
-                    </span>
-                  </button>
+                    {editingId === thread.id ? (
+                      <form
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void saveRename(thread.id);
+                        }}
+                      >
+                        <input
+                          value={draft}
+                          autoFocus
+                          disabled={savingTitle}
+                          aria-label="Tiêu đề cuộc trò chuyện"
+                          onChange={(event) => setDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") cancelRename();
+                          }}
+                          className="w-full rounded-md border border-black/15 bg-white px-2 py-1 text-sm text-black outline-none focus:border-primary dark:border-white/20 dark:bg-navy dark:text-white"
+                        />
+                        {renameError ? (
+                          <p
+                            className={
+                              selected
+                                ? "mt-1 text-xs text-red-100"
+                                : "mt-1 text-xs text-red-700 dark:text-red-300"
+                            }
+                          >
+                            {renameError}
+                          </p>
+                        ) : (
+                          <p
+                            className={
+                              selected
+                                ? "mt-1 text-xs text-white/70"
+                                : "mt-1 text-xs text-black/45 dark:text-white/45"
+                            }
+                          >
+                            Enter để lưu, Esc để hủy
+                          </p>
+                        )}
+                      </form>
+                    ) : (
+                      <div className="flex items-start gap-1">
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => onSelect(thread.id)}
+                          className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
+                        >
+                          <span className="block whitespace-normal break-words text-sm font-medium">
+                            {thread.title}
+                          </span>
+                          <span
+                            className={
+                              selected
+                                ? "mt-0.5 block text-xs text-white/70"
+                                : "mt-0.5 block text-xs text-black/45 dark:text-white/45"
+                            }
+                          >
+                            {formatThreadTime(thread.updated_at)}
+                          </span>
+                        </button>
+                        <div className="flex shrink-0 items-center">
+                          {confirmDeleteId === thread.id ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={deletingId === thread.id}
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="rounded-md px-1.5 py-1 text-xs disabled:opacity-50"
+                              >
+                                Hủy
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingId === thread.id}
+                                onClick={() => void removeThread(thread.id)}
+                                className={
+                                  selected
+                                    ? "rounded-md px-1.5 py-1 text-xs font-medium text-red-100 disabled:opacity-50"
+                                    : "rounded-md px-1.5 py-1 text-xs font-medium text-red-700 disabled:opacity-50 dark:text-red-200"
+                                }
+                              >
+                                {deletingId === thread.id ? "..." : "Xóa"}
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                disabled={disabled || savingTitle}
+                                aria-label={`Đổi tiêu đề ${thread.title}`}
+                                title="Đổi tiêu đề"
+                                onClick={() => startRename(thread)}
+                                className={
+                                  selected
+                                    ? "rounded-md p-1 text-white/80 hover:bg-white/15 disabled:opacity-50"
+                                    : "rounded-md p-1 text-black/45 hover:bg-black/5 disabled:opacity-50 dark:text-white/50 dark:hover:bg-white/10"
+                                }
+                              >
+                                <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={disabled || deletingId !== null}
+                                aria-label={`Xóa ${thread.title}`}
+                                title="Xóa cuộc trò chuyện"
+                                onClick={() => {
+                                  cancelRename();
+                                  setConfirmDeleteId(thread.id);
+                                }}
+                                className={
+                                  selected
+                                    ? "rounded-md p-1 text-white/80 hover:bg-white/15 disabled:opacity-50"
+                                    : "rounded-md p-1 text-black/45 hover:bg-black/5 disabled:opacity-50 dark:text-white/50 dark:hover:bg-white/10"
+                                }
+                              >
+                                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -572,6 +741,29 @@ export function ChatPanel() {
     }
   }
 
+  async function deleteThread(threadId: string) {
+    const token = await getToken();
+    if (!token) throw new Error("Bạn cần đăng nhập lại.");
+    await deleteChatThread(token, threadId);
+    setThreads((current) => current.filter((thread) => thread.id !== threadId));
+    if (activeThreadRef.current === threadId) {
+      setActiveThreadId(null);
+      setMessages([]);
+      setInput("");
+    }
+  }
+
+  async function renameThread(threadId: string, title: string) {
+    const token = await getToken();
+    if (!token) throw new Error("Bạn cần đăng nhập lại.");
+    const updated = await renameChatThread(token, threadId, title);
+    setThreads((current) =>
+      current.map((thread) =>
+        thread.id === updated.id ? { ...thread, title: updated.title } : thread,
+      ),
+    );
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void sendPrompt(input);
@@ -591,6 +783,8 @@ export function ChatPanel() {
       disabled={loading || !historyReady}
       onCreate={startNewConversation}
       onSelect={(threadId) => void openThread(threadId)}
+      onRename={renameThread}
+      onDelete={deleteThread}
     />
   );
 
