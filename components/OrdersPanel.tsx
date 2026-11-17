@@ -1046,21 +1046,14 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
             ) : filtered.length === 0 ? (
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 {orders.length === 0
-<<<<<<< HEAD
-                  ? "Chưa có đơn hàng. Bấm “Thêm đơn hàng” để tạo mới."
+                  ? ownerFilter
+                    ? "Nhân viên này chưa có đơn hàng."
+                    : "Chưa có đơn hàng. Bấm “Thêm đơn hàng” để tạo mới."
                   : statusFilter && !customerFilter && !query.trim()
                     ? "Không có đơn ở trạng thái này."
                     : customerFilter && !statusFilter && !query.trim()
                       ? "Khách hàng này chưa có đơn."
                       : "Không tìm thấy đơn hàng phù hợp."}
-=======
-                  ? ownerFilter
-                    ? "Nhân viên này chưa có đơn hàng."
-                    : "Chưa có đơn hàng. Bấm “Thêm đơn hàng” để tạo mới."
-                  : customerFilter
-                    ? "Khách hàng này chưa có đơn."
-                    : "Không tìm thấy đơn hàng phù hợp."}
->>>>>>> sales-manager
               </li>
             ) : (
               filtered.map((order) => {
@@ -1084,18 +1077,13 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                         className="w-full px-3 py-3 text-left"
                       >
                         <p className="truncate text-sm font-bold">{customerLabel(customer)}</p>
-<<<<<<< HEAD
-                        <p className="mt-1 flex flex-wrap items-center gap-1.5">
-                          {order.order_code?.trim() ? (
-=======
                         {showOwnerFilter && order.owner_email ? (
                           <p className={`mt-0.5 truncate text-xs ${active ? "opacity-80" : "text-black/55 dark:text-white/55"}`}>
                             {order.clerk_id === selfId ? `${order.owner_email} (tôi)` : order.owner_email}
                           </p>
                         ) : null}
-                        {order.order_code?.trim() ? (
-                          <p className="mt-1">
->>>>>>> sales-manager
+                        <p className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {order.order_code?.trim() ? (
                             <span
                               className={`rounded px-1.5 py-0.5 text-xs font-bold ${
                                 active
