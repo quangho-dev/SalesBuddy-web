@@ -37,11 +37,21 @@ type ItemForm = {
   custom: boolean;
 };
 
+type OrderStatus = "official" | "cancelled" | "paused";
+
+const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
+  { value: "official", label: "Chính thức" },
+  { value: "paused", label: "Tạm dừng" },
+  { value: "cancelled", label: "Đã huỷ" },
+];
+
 type FormState = {
   customer_id: string;
   order_date: string;
   order_time: string;
   notes: string;
+  status: OrderStatus;
+  cancellation_reason: string;
   is_paid: boolean;
   is_delivered: boolean;
   delivery_date: string;
@@ -147,6 +157,8 @@ function emptyForm(customerId = ""): FormState {
     order_date: todayIso(),
     order_time: nowTime(),
     notes: "",
+    status: "official",
+    cancellation_reason: "",
     is_paid: false,
     is_delivered: false,
     delivery_date: "",
@@ -155,6 +167,52 @@ function emptyForm(customerId = ""): FormState {
     paid_amount: "0",
     items: [newItem()],
   };
+}
+
+function orderStatus(value?: string | null): OrderStatus {
+  if (value === "cancelled" || value === "paused" || value === "official") return value;
+  return "official";
+}
+
+function orderStatusLabel(value?: string | null) {
+  return ORDER_STATUS_OPTIONS.find((option) => option.value === orderStatus(value))?.label ?? "Chính thức";
+}
+
+function statusChangeLabel(event: { previous_status?: string | null; status?: string | null }) {
+  const next = orderStatusLabel(event.status);
+  const previous = (event.previous_status || "").trim();
+  if (!previous) return `Tạo đơn · ${next}`;
+  if (previous === event.status && event.status === "cancelled") return "Cập nhật lý do huỷ";
+  return `${orderStatusLabel(previous)} → ${next}`;
+}
+
+function OrderStatusHistory({ events }: { events?: Order["status_events"] }) {
+  const rows = events ?? [];
+  return (
+    <div className="flex flex-col gap-2 border-t border-black/10 pt-3 dark:border-white/10">
+      <p className="text-sm font-medium">Lịch sử trạng thái</p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-black/55 dark:text-white/55">Chưa có lần đổi trạng thái.</p>
+      ) : (
+        <ul className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+          {rows.map((event) => (
+            <li key={event.id} className="text-sm">
+              <p>
+                <span className="text-black/55 dark:text-white/55">
+                  {formatDateTime(event.created_at)}
+                </span>
+                {" · "}
+                {statusChangeLabel(event)}
+              </p>
+              {event.reason?.trim() ? (
+                <p className="mt-0.5 text-xs text-red-700 dark:text-red-300">{event.reason}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function paymentMethodLabel(method?: string | null) {
@@ -212,6 +270,8 @@ function fromOrder(order: Order, products: Product[] = []): FormState {
     order_date: created.date,
     order_time: created.time,
     notes: order.notes ?? "",
+    status: orderStatus(order.status),
+    cancellation_reason: order.cancellation_reason ?? "",
     is_paid: Boolean(order.is_paid),
     is_delivered: Boolean(order.is_delivered),
     delivery_date: delivery.date,
@@ -261,6 +321,8 @@ function toPayload(form: FormState): OrderInput {
     customer_id: form.customer_id,
     order_date: deliveryTimestamp(form.order_date || todayIso(), form.order_time || nowTime()),
     notes: form.notes,
+    status: orderStatus(form.status),
+    cancellation_reason: form.status === "cancelled" ? form.cancellation_reason.trim() : "",
     is_paid: Boolean(form.is_paid),
     is_delivered: Boolean(form.is_delivered),
     delivered_at: deliveryTimestamp(form.delivery_date, form.delivery_time),
@@ -443,6 +505,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
   const [form, setForm] = useState<FormState>(emptyForm);
   const [query, setQuery] = useState("");
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS);
+  const [statusFilter, setStatusFilter] = useState<"" | OrderStatus>("");
   const [catalogQuery, setCatalogQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
   const [loadingList, setLoadingList] = useState(true);
@@ -460,6 +523,9 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
     if (customerFilter) {
       rows = rows.filter((order) => order.customer_id === customerFilter);
     }
+    if (statusFilter) {
+      rows = rows.filter((order) => orderStatus(order.status) === statusFilter);
+    }
     const needle = query.trim().toLowerCase();
     if (!needle) return rows;
     return rows.filter((order) => {
@@ -468,6 +534,8 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
         customerLabel(customer),
         customer?.phone_number ?? "",
         order.notes,
+        orderStatusLabel(order.status),
+        order.cancellation_reason,
         order.is_paid ? "đã thanh toán" : "chưa thanh toán",
         order.is_delivered ? "đã giao hàng" : "chưa giao hàng",
         formatDateTime(order.delivered_at),
@@ -480,7 +548,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [customers, customerFilter, orders, query]);
+  }, [customers, customerFilter, orders, query, statusFilter]);
 
   const productTypes = useMemo(() => {
     const names = new Set<string>();
@@ -889,6 +957,21 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                 ))}
               </select>
             </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Trạng thái
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as "" | OrderStatus)}
+                className={inputClass}
+              >
+                <option value="">Tất cả</option>
+                {ORDER_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label htmlFor="order-search" className="sr-only">
               Tìm đơn hàng
             </label>
@@ -909,9 +992,11 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 {orders.length === 0
                   ? "Chưa có đơn hàng. Bấm “Thêm đơn hàng” để tạo mới."
-                  : customerFilter
-                    ? "Khách hàng này chưa có đơn."
-                    : "Không tìm thấy đơn hàng phù hợp."}
+                  : statusFilter && !customerFilter && !query.trim()
+                    ? "Không có đơn ở trạng thái này."
+                    : customerFilter && !statusFilter && !query.trim()
+                      ? "Khách hàng này chưa có đơn."
+                      : "Không tìm thấy đơn hàng phù hợp."}
               </li>
             ) : (
               filtered.map((order) => {
@@ -935,8 +1020,8 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                         className="w-full px-3 py-3 text-left"
                       >
                         <p className="truncate text-sm font-bold">{customerLabel(customer)}</p>
-                        {order.order_code?.trim() ? (
-                          <p className="mt-1">
+                        <p className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {order.order_code?.trim() ? (
                             <span
                               className={`rounded px-1.5 py-0.5 text-xs font-bold ${
                                 active
@@ -946,6 +1031,28 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                             >
                               {order.order_code.trim()}
                             </span>
+                          ) : null}
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                              active
+                                ? "bg-white/20 text-white"
+                                : orderStatus(order.status) === "cancelled"
+                                  ? "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200"
+                                  : orderStatus(order.status) === "paused"
+                                    ? "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
+                                    : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+                            }`}
+                          >
+                            {orderStatusLabel(order.status)}
+                          </span>
+                        </p>
+                        {orderStatus(order.status) === "cancelled" && order.cancellation_reason?.trim() ? (
+                          <p
+                            className={`mt-1 line-clamp-2 text-xs ${
+                              active ? "text-white/80" : "text-black/55 dark:text-white/55"
+                            }`}
+                          >
+                            Lý do huỷ: {order.cancellation_reason.trim()}
                           </p>
                         ) : null}
                         <p className="mt-0.5 truncate text-xs">
@@ -1150,6 +1257,52 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                   trước khi tạo đơn.
                 </p>
               ) : null}
+
+              <div className="flex flex-col gap-2">
+                <p className="text-sm">Trạng thái đơn hàng</p>
+                <div className="flex flex-wrap gap-2">
+                  {ORDER_STATUS_OPTIONS.map((option) => {
+                    const selectedStatus = form.status === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selectedStatus}
+                        disabled={busy}
+                        onClick={() => updateField("status", option.value)}
+                        className={`h-9 rounded-lg border px-3 text-sm disabled:opacity-50 ${
+                          selectedStatus
+                            ? option.value === "cancelled"
+                              ? "border-red-700 bg-red-700 text-white"
+                              : option.value === "paused"
+                                ? "border-amber-600 bg-amber-500 text-amber-950"
+                                : "border-primary bg-primary text-white"
+                            : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {form.status === "cancelled" ? (
+                  <label className="flex flex-col gap-1 text-sm">
+                    Lý do huỷ
+                    <textarea
+                      value={form.cancellation_reason}
+                      onChange={(event) => updateField("cancellation_reason", event.target.value)}
+                      rows={3}
+                      maxLength={1000}
+                      placeholder="Không bắt buộc"
+                      className={inputClass}
+                    disabled={busy}
+                  />
+                  </label>
+                ) : null}
+                {!creating && selected ? (
+                  <OrderStatusHistory events={selected.status_events} />
+                ) : null}
+              </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <CustomerPicker

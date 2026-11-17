@@ -114,11 +114,24 @@ export type OrderItem = {
   notes: string;
 };
 
+export type OrderStatus = "official" | "cancelled" | "paused";
+
+export type OrderStatusEvent = {
+  id: string;
+  previous_status?: OrderStatus | "";
+  status?: OrderStatus;
+  reason?: string;
+  created_at?: string;
+};
+
 export type Order = {
   id: string;
   clerk_id: string;
   customer_id: string;
   order_code?: string;
+  status?: OrderStatus;
+  cancellation_reason?: string;
+  status_events?: OrderStatusEvent[];
   order_date: string;
   notes: string;
   is_paid: boolean;
@@ -151,6 +164,8 @@ export type OrderInput = {
   customer_id: string;
   order_date?: string | null;
   notes: string;
+  status?: OrderStatus;
+  cancellation_reason?: string;
   is_paid: boolean;
   is_delivered: boolean;
   delivered_at?: string | null;
