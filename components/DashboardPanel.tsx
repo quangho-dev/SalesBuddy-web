@@ -11,6 +11,7 @@ import {
   type DashboardPeriod,
   type DashboardProductRank,
   type DashboardRevenuePoint,
+  type DashboardStaffRank,
 } from "@/lib/api";
 
 const PERIODS: { value: DashboardPeriod; label: string }[] = [
@@ -90,6 +91,14 @@ function customerName(row: DashboardCustomerRank): string {
     row.customer_code.trim() ||
     "Khách hàng chưa đặt tên"
   );
+}
+
+function staffName(row: DashboardStaffRank): string {
+  return (row.name || "").trim();
+}
+
+function staffEmail(row: DashboardStaffRank): string {
+  return (row.email || "").trim() || "Nhân viên chưa có email";
 }
 
 function productName(row: DashboardProductRank): string {
@@ -292,6 +301,48 @@ export function DashboardPanel() {
                 Đang tải biểu đồ...
               </p>
             )}
+
+            {data.period === period && data.staff_ranking ? (
+              <RankList
+                title={`Xếp hạng doanh số nhân viên · ${rangeLabel(data)}`}
+                empty="Chưa có nhân viên sales trong tổ chức."
+              >
+                {data.staff_ranking.length
+                  ? data.staff_ranking.map((row, index) => (
+                      <li
+                        key={`${row.email}-${index}`}
+                        className="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10"
+                      >
+                        <span className="mt-0.5 w-5 text-sm font-semibold text-black/45 dark:text-white/45">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          {staffName(row) ? (
+                            <p className="whitespace-normal break-words text-sm font-medium">
+                              {staffName(row)}
+                            </p>
+                          ) : null}
+                          <p
+                            className={
+                              staffName(row)
+                                ? "whitespace-normal break-words text-xs text-black/55 dark:text-white/55"
+                                : "whitespace-normal break-words text-sm font-medium"
+                            }
+                          >
+                            {staffEmail(row)}
+                          </p>
+                          <p className="text-xs text-black/55 dark:text-white/55">
+                            {row.order_count} đơn
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-sm font-semibold">
+                          {formatPrice(row.revenue)}đ
+                        </p>
+                      </li>
+                    ))
+                  : null}
+              </RankList>
+            ) : null}
 
             {data.period === period ? (
             <div className="grid gap-4 lg:grid-cols-2">

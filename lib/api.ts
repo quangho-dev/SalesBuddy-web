@@ -23,6 +23,15 @@ export type Customer = {
   interaction_history: CustomerInteraction[];
   created_at: string;
   updated_at: string;
+  owner_email?: string;
+};
+
+export type CustomerOwner = {
+  clerk_id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_self: boolean;
 };
 
 export type Product = {
@@ -134,6 +143,7 @@ export type Order = {
   updated_at: string;
   customers?: OrderCustomer | null;
   items: OrderItem[];
+  owner_email?: string;
 };
 
 export type OrderItemInput = {
@@ -216,6 +226,7 @@ export type Quote = {
   updated_at: string;
   customers?: OrderCustomer | null;
   items: QuoteItem[];
+  owner_email?: string;
 };
 
 export type QuoteItemInput = {
@@ -318,6 +329,7 @@ export type DocumentCitation = {
   filename: string;
   page?: number | string | null;
   excerpt: string;
+  owner?: string;
 };
 
 export type ChatHistoryMessage = {
@@ -476,8 +488,19 @@ export async function updateRagSettings(
   });
 }
 
-export async function listCustomers(token: string): Promise<Customer[]> {
-  return apiJson<Customer[]>("/api/customers/", token);
+export async function listCustomerOwners(token: string): Promise<CustomerOwner[]> {
+  const payload = await apiJson<{ owners: CustomerOwner[] }>("/api/customers/owners", token);
+  return payload.owners ?? [];
+}
+
+export async function listCustomers(
+  token: string,
+  ownerClerkId?: string,
+): Promise<Customer[]> {
+  const params = new URLSearchParams();
+  if (ownerClerkId) params.set("owner_clerk_id", ownerClerkId);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return apiJson<Customer[]>(`/api/customers/${query}`, token);
 }
 
 export async function getCustomer(
@@ -596,8 +619,14 @@ export async function downloadCustomerTemplate(token: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-export async function downloadCustomersExport(token: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/customers/export`, {
+export async function downloadCustomersExport(
+  token: string,
+  ownerClerkId?: string,
+): Promise<void> {
+  const params = new URLSearchParams();
+  if (ownerClerkId) params.set("owner_clerk_id", ownerClerkId);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${API_URL}/api/customers/export${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
@@ -765,6 +794,19 @@ export type CurrentUser = {
   organization: Organization | null;
 };
 
+export type SalesStaffMember = {
+  clerk_id: string;
+  name: string;
+  email: string;
+  role: "sales_representative";
+  customer_count: number;
+};
+
+export async function listSalesStaff(token: string): Promise<SalesStaffMember[]> {
+  const payload = await apiJson<{ staff: SalesStaffMember[] }>("/api/user/staff", token);
+  return payload.staff ?? [];
+}
+
 export async function getCurrentUser(token: string): Promise<CurrentUser> {
   return apiJson<CurrentUser>("/api/user/me", token);
 }
@@ -779,8 +821,14 @@ export async function joinOrganization(
   });
 }
 
-export async function downloadOrdersExport(token: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/orders/export`, {
+export async function downloadOrdersExport(
+  token: string,
+  ownerClerkId?: string,
+): Promise<void> {
+  const params = new URLSearchParams();
+  if (ownerClerkId) params.set("owner_clerk_id", ownerClerkId);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${API_URL}/api/orders/export${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
@@ -799,7 +847,7 @@ export async function downloadOrdersExport(token: string): Promise<void> {
 
 export async function listOrders(
   token: string,
-  filters?: { customerId?: string; isPaid?: boolean },
+  filters?: { customerId?: string; isPaid?: boolean; ownerClerkId?: string },
 ): Promise<Order[]> {
   const params = new URLSearchParams();
   if (filters?.customerId) {
@@ -807,6 +855,9 @@ export async function listOrders(
   }
   if (filters?.isPaid !== undefined) {
     params.set("is_paid", String(filters.isPaid));
+  }
+  if (filters?.ownerClerkId) {
+    params.set("owner_clerk_id", filters.ownerClerkId);
   }
   const query = params.toString() ? `?${params.toString()}` : "";
   return apiJson<Order[]>(`/api/orders/${query}`, token);
@@ -939,10 +990,12 @@ export async function deletePayment(
 export async function listQuotes(
   token: string,
   customerId?: string,
+  ownerClerkId?: string,
 ): Promise<Quote[]> {
-  const query = customerId
-    ? `?customer_id=${encodeURIComponent(customerId)}`
-    : "";
+  const params = new URLSearchParams();
+  if (customerId) params.set("customer_id", customerId);
+  if (ownerClerkId) params.set("owner_clerk_id", ownerClerkId);
+  const query = params.toString() ? `?${params.toString()}` : "";
   return apiJson<Quote[]>(`/api/quotes/${query}`, token);
 }
 
@@ -1052,6 +1105,9 @@ export type SalesDocument = {
   processing_status: string | null;
   error: string | null;
   chunk_count: number;
+  owner_name: string;
+  owner_email: string;
+  is_owner: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -1135,6 +1191,13 @@ export type DashboardProductRank = {
   order_count: number;
 };
 
+export type DashboardStaffRank = {
+  name: string;
+  email: string;
+  revenue: number;
+  order_count: number;
+};
+
 export type Dashboard = {
   timezone: string;
   period: DashboardPeriod;
@@ -1152,6 +1215,7 @@ export type Dashboard = {
   };
   top_customers: DashboardCustomerRank[];
   top_products: DashboardProductRank[];
+  staff_ranking: DashboardStaffRank[] | null;
 };
 
 export async function getDashboard(

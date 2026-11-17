@@ -10,7 +10,7 @@ const inputClass =
 
 export function OrganizationGate({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth();
-  const { setOrganizationLabel, setRoleLabel } = useCurrentAccount();
+  const { setOrganizationLabel, setRole, setRoleLabel } = useCurrentAccount();
   const [phase, setPhase] = useState<"loading" | "needed" | "ready" | "error">("loading");
   const [name, setName] = useState("");
   const [taxCode, setTaxCode] = useState("");
@@ -25,13 +25,14 @@ export function OrganizationGate({ children }: { children: React.ReactNode }) {
       if (!token) throw new Error("Bạn cần đăng nhập lại.");
       const user = await getCurrentUser(token);
       setOrganizationLabel(organizationLabel(user.organization));
+      setRole(user.role);
       setRoleLabel(vietnameseRole(user.role));
       setPhase(user.organization_id ? "ready" : "needed");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không kiểm tra được tổ chức.");
       setPhase("error");
     }
-  }, [getToken, setOrganizationLabel, setRoleLabel]);
+  }, [getToken, setOrganizationLabel, setRole, setRoleLabel]);
 
   useEffect(() => {
     void load();
@@ -55,6 +56,7 @@ export function OrganizationGate({ children }: { children: React.ReactNode }) {
         tax_code: nextTaxCode,
       });
       setOrganizationLabel(organizationLabel(user.organization));
+      setRole(user.role);
       setRoleLabel(vietnameseRole(user.role));
       setPhase(user.organization_id ? "ready" : "needed");
     } catch (err) {

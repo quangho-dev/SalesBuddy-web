@@ -1,6 +1,7 @@
 "use client";
 
 import { UserButton } from "@clerk/nextjs";
+import { useCurrentAccount } from "@/components/CurrentAccount";
 import { UserGreeting } from "@/components/UserGreeting";
 import {
   Bot,
@@ -13,6 +14,7 @@ import {
   PanelLeftOpen,
   Settings,
   ShoppingCart,
+  UserRound,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -30,6 +32,7 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   match: (pathname: string) => boolean;
+  managerOnly?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -50,6 +53,13 @@ const navItems: NavItem[] = [
     label: "Khách hàng",
     icon: Users,
     match: (pathname) => pathname.startsWith("/customers"),
+  },
+  {
+    href: "/staff",
+    label: "Nhân viên",
+    icon: UserRound,
+    match: (pathname) => pathname.startsWith("/staff"),
+    managerOnly: true,
   },
   {
     href: "/products",
@@ -105,6 +115,8 @@ export function AppSidebar({
   onToggleCollapsed,
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const { role } = useCurrentAccount();
+  const items = navItems.filter((item) => !item.managerOnly || role === "sales_supervisor");
 
   return (
     <aside
@@ -144,7 +156,7 @@ export function AppSidebar({
       </div>
 
       <nav className={`flex flex-1 flex-col gap-1 ${collapsed ? "p-2" : "p-3"}`}>
-        {navItems.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           return (
             <Link

@@ -6,6 +6,8 @@ import type { Organization } from "@/lib/api";
 type CurrentAccountValue = {
   organizationLabel: string;
   setOrganizationLabel: (value: string) => void;
+  role: string;
+  setRole: (value: string) => void;
   roleLabel: string;
   setRoleLabel: (value: string) => void;
 };
@@ -24,10 +26,11 @@ export function vietnameseRole(role?: string | null) {
 
 export function CurrentAccountProvider({ children }: { children: React.ReactNode }) {
   const [organizationLabel, setOrganizationLabel] = useState("");
+  const [role, setRole] = useState("");
   const [roleLabel, setRoleLabel] = useState("");
   const value = useMemo(
-    () => ({ organizationLabel, setOrganizationLabel, roleLabel, setRoleLabel }),
-    [organizationLabel, roleLabel],
+    () => ({ organizationLabel, setOrganizationLabel, role, setRole, roleLabel, setRoleLabel }),
+    [organizationLabel, role, roleLabel],
   );
   return (
     <CurrentAccountContext.Provider value={value}>{children}</CurrentAccountContext.Provider>

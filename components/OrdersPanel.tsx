@@ -12,11 +12,13 @@ import {
   downloadOrdersExport,
   generateOrderFile,
   getOrder,
+  listCustomerOwners,
   listCustomers,
   listOrders,
   listProducts,
   updateOrder,
   type Customer,
+  type CustomerOwner,
   type GeneratedOrderFile,
   type Order,
   type OrderInput,
@@ -442,6 +444,9 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [query, setQuery] = useState("");
+  const [owners, setOwners] = useState<CustomerOwner[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const pendingOwnerRef = useRef<string | null>(null);
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
@@ -454,6 +459,12 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
   const [confirmSave, setConfirmSave] = useState(false);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
+  const selfId = owners.find((owner) => owner.is_self)?.clerk_id ?? "";
+  const readOnly = Boolean(selfId && selected && selected.clerk_id !== selfId);
+  const showOwnerFilter = owners.length > 1;
+  const pickerCustomers = selfId
+    ? customers.filter((customer) => !creating || customer.clerk_id === selfId)
+    : customers;
 
   const filtered = useMemo(() => {
     let rows = orders;
@@ -518,14 +529,16 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
     setLoadingList(true);
     try {
       const token = await withToken();
-      const [orderRows, customerRows, productRows] = await Promise.all([
-        listOrders(token),
+      const [orderRows, customerRows, productRows, ownerRows] = await Promise.all([
+        listOrders(token, { ownerClerkId: ownerFilter || undefined }),
         listCustomers(token),
         listProducts(token),
+        listCustomerOwners(token),
       ]);
       setOrders(orderRows);
       setCustomers(customerRows);
       setProducts(productRows);
+      setOwners(ownerRows);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Không tải được danh sách đơn hàng.",
@@ -533,11 +546,24 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
     } finally {
       setLoadingList(false);
     }
-  }, [withToken]);
+  }, [ownerFilter, withToken]);
 
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  useEffect(() => {
+    pendingOwnerRef.current = new URLSearchParams(window.location.search).get("owner");
+  }, []);
+
+  useEffect(() => {
+    const owner = pendingOwnerRef.current;
+    if (!owner || owners.length === 0) return;
+    if (owners.some((item) => item.clerk_id === owner)) {
+      setOwnerFilter(owner);
+    }
+    pendingOwnerRef.current = null;
+  }, [owners]);
 
   useEffect(() => {
     if (!customerFilter) return;
@@ -666,6 +692,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
 
   function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (readOnly) return;
     const error = orderPayloadError(toPayload(form));
     if (error) {
       toast.error(error);
@@ -819,7 +846,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
     try {
       const token = await getToken();
       if (!token) throw new Error("Bạn cần đăng nhập để xuất Excel.");
-      await downloadOrdersExport(token);
+      await downloadOrdersExport(token, ownerFilter || undefined);
       toast.success("Đã xuất danh sách đơn hàng.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Không xuất được file Excel.");
@@ -874,6 +901,34 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
           }`}
         >
           <div className="flex flex-col gap-3 border-b border-black/10 p-4 dark:border-white/10">
+            {showOwnerFilter ? (
+              <label className="flex flex-col gap-1 text-sm">
+                Nhân viên
+                <select
+                  value={ownerFilter}
+                  onChange={(event) => {
+                    setOwnerFilter(event.target.value);
+                    setSelectedId(null);
+                    setCreating(false);
+                    setConfirmDelete(false);
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">Tất cả nhân viên</option>
+                  {owners.map((owner) => (
+                    <option key={owner.clerk_id} value={owner.clerk_id}>
+                      {owner.email.trim()
+                        ? owner.is_self
+                          ? `${owner.email.trim()} (tôi)`
+                          : owner.email.trim()
+                        : owner.is_self
+                          ? "Tôi"
+                          : "Nhân viên chưa có email"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="flex flex-col gap-1 text-sm">
               Khách hàng
               <select
@@ -908,7 +963,9 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
             ) : filtered.length === 0 ? (
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 {orders.length === 0
-                  ? "Chưa có đơn hàng. Bấm “Thêm đơn hàng” để tạo mới."
+                  ? ownerFilter
+                    ? "Nhân viên này chưa có đơn hàng."
+                    : "Chưa có đơn hàng. Bấm “Thêm đơn hàng” để tạo mới."
                   : customerFilter
                     ? "Khách hàng này chưa có đơn."
                     : "Không tìm thấy đơn hàng phù hợp."}
@@ -935,6 +992,11 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                         className="w-full px-3 py-3 text-left"
                       >
                         <p className="truncate text-sm font-bold">{customerLabel(customer)}</p>
+                        {showOwnerFilter && order.owner_email ? (
+                          <p className={`mt-0.5 truncate text-xs ${active ? "opacity-80" : "text-black/55 dark:text-white/55"}`}>
+                            {order.clerk_id === selfId ? `${order.owner_email} (tôi)` : order.owner_email}
+                          </p>
+                        ) : null}
                         {order.order_code?.trim() ? (
                           <p className="mt-1">
                             <span
@@ -1076,7 +1138,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                       Xem file Drive
                     </a>
                   ) : null}
-                  {!creating && selectedId ? (
+                  {!creating && selectedId && !readOnly ? (
                     confirmDelete ? (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-red-700 dark:text-red-300">Xóa đơn này?</span>
@@ -1110,6 +1172,12 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                 </div>
               </div>
 
+              {readOnly && selected ? (
+                <p className="rounded-lg border border-black/10 bg-black/[0.03] px-3 py-2 text-sm text-black/70 dark:border-white/15 dark:bg-white/[0.04] dark:text-white/70">
+                  Đơn của {selected.owner_email || "nhân viên khác"}. Bạn chỉ xem được thông tin này.
+                </p>
+              ) : null}
+
               {generating ? (
                 <p className="rounded-lg border border-black/15 px-3 py-2 text-sm text-black/70 dark:border-white/20 dark:text-white/70">
                   Đang copy mẫu don-hang.xls và điền dữ liệu. Việc này có thể mất khoảng một phút.
@@ -1141,6 +1209,10 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                 </div>
               ) : null}
 
+              <fieldset
+                disabled={readOnly}
+                className="m-0 flex min-w-0 flex-col gap-5 border-0 p-0 disabled:opacity-80"
+              >
               {customers.length === 0 ? (
                 <p className="rounded-lg border border-black/10 px-3 py-2 text-sm dark:border-white/15">
                   Chưa có khách hàng.{" "}
@@ -1153,9 +1225,9 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <CustomerPicker
-                  customers={customers}
+                  customers={pickerCustomers}
                   selectedId={form.customer_id}
-                  disabled={busy}
+                  disabled={busy || readOnly}
                   inputId="order-customer-search"
                   resultsId="order-customer-results"
                   onSelect={(customerId) => updateField("customer_id", customerId)}
@@ -1585,7 +1657,9 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                   ) : null}
                 </div>
               </div>
+              </fieldset>
 
+              {readOnly ? null : (
               <div className="flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
@@ -1603,6 +1677,7 @@ export function OrdersPanel({ initialOrderId }: { initialOrderId?: string } = {}
                   {saving ? "Đang lưu..." : creating ? "Tạo đơn hàng" : "Lưu thay đổi"}
                 </button>
               </div>
+              )}
             </form>
           )}
         </section>
