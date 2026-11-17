@@ -1216,6 +1216,10 @@ export type Dashboard = {
   top_customers: DashboardCustomerRank[];
   top_products: DashboardProductRank[];
   staff_ranking: DashboardStaffRank[] | null;
+  organization_rankings: {
+    customers: DashboardCustomerRank[];
+    products: DashboardProductRank[];
+  } | null;
 };
 
 export async function getDashboard(
