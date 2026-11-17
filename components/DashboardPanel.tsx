@@ -296,8 +296,8 @@ export function DashboardPanel() {
             {data.period === period ? (
             <div className="grid gap-4 lg:grid-cols-2">
               <RankList
-                title="Top 5 khách hàng"
-                empty="Chưa có doanh thu trong khoảng này."
+                title="Top 5 khách hàng theo doanh số"
+                empty="Chưa có doanh số khách hàng trong khoảng này."
               >
                 {data.top_customers.length
                   ? data.top_customers.map((row, index) => (
@@ -327,8 +327,8 @@ export function DashboardPanel() {
               </RankList>
 
               <RankList
-                title="Top 5 sản phẩm bán chạy"
-                empty="Chưa có sản phẩm bán trong khoảng này."
+                title="Top 5 sản phẩm theo doanh số"
+                empty="Chưa có doanh số sản phẩm trong khoảng này."
               >
                 {data.top_products.length
                   ? data.top_products.map((row, index) => (
