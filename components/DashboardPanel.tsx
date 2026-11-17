@@ -11,6 +11,7 @@ import {
   type DashboardPeriod,
   type DashboardProductRank,
   type DashboardRevenuePoint,
+  type DashboardStaffRank,
 } from "@/lib/api";
 
 const PERIODS: { value: DashboardPeriod; label: string }[] = [
@@ -92,6 +93,14 @@ function customerName(row: DashboardCustomerRank): string {
   );
 }
 
+function staffName(row: DashboardStaffRank): string {
+  return (row.name || "").trim();
+}
+
+function staffEmail(row: DashboardStaffRank): string {
+  return (row.email || "").trim() || "Nhân viên chưa có email";
+}
+
 function productName(row: DashboardProductRank): string {
   const name = row.product_name.trim() || "Sản phẩm";
   const code = row.product_code.trim();
@@ -157,6 +166,50 @@ function RevenueChart({
           ? `${pointDetail(active, data)} · ${formatPrice(active.revenue)}đ · ${active.order_count} đơn`
           : `${formatPrice(data.revenue[data.period])}đ · ${data.order_count[data.period]} đơn`}
       </p>
+    </section>
+  );
+}
+
+function RankingChart({
+  title,
+  empty,
+  rows,
+}: {
+  title: string;
+  empty: string;
+  rows: { key: string; label: string; detail: string; revenue: number }[];
+}) {
+  const max = Math.max(...rows.map((row) => row.revenue), 0);
+  return (
+    <section className="rounded-xl border border-black/10 p-4 dark:border-white/15">
+      <h2 className="text-sm font-semibold">{title}</h2>
+      {rows.length === 0 ? (
+        <p className="mt-4 text-sm text-black/50 dark:text-white/50">{empty}</p>
+      ) : (
+        <ol className="mt-4 flex flex-col gap-3" aria-label={title}>
+          {rows.map((row, index) => {
+            const width = max > 0 ? (row.revenue / max) * 100 : 0;
+            return (
+              <li key={row.key}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="min-w-0 truncate text-sm font-medium">
+                    <span className="mr-2 text-black/45 dark:text-white/45">{index + 1}</span>
+                    {row.label}
+                  </p>
+                  <p className="shrink-0 text-sm font-semibold">{formatPrice(row.revenue)}đ</p>
+                </div>
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-black/5 dark:bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${width}%`, minWidth: row.revenue > 0 ? 4 : 0 }}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-black/55 dark:text-white/55">{row.detail}</p>
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </section>
   );
 }
@@ -292,6 +345,73 @@ export function DashboardPanel() {
                 Đang tải biểu đồ...
               </p>
             )}
+
+            {data.period === period && data.staff_ranking ? (
+              <RankList
+                title={`Xếp hạng doanh số nhân viên · ${rangeLabel(data)}`}
+                empty="Chưa có nhân viên sales trong tổ chức."
+              >
+                {data.staff_ranking.length
+                  ? data.staff_ranking.map((row, index) => (
+                      <li
+                        key={`${row.email}-${index}`}
+                        className="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-black/5 dark:hover:bg-white/10"
+                      >
+                        <span className="mt-0.5 w-5 text-sm font-semibold text-black/45 dark:text-white/45">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          {staffName(row) ? (
+                            <p className="whitespace-normal break-words text-sm font-medium">
+                              {staffName(row)}
+                            </p>
+                          ) : null}
+                          <p
+                            className={
+                              staffName(row)
+                                ? "whitespace-normal break-words text-xs text-black/55 dark:text-white/55"
+                                : "whitespace-normal break-words text-sm font-medium"
+                            }
+                          >
+                            {staffEmail(row)}
+                          </p>
+                          <p className="text-xs text-black/55 dark:text-white/55">
+                            {row.order_count} đơn
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-sm font-semibold">
+                          {formatPrice(row.revenue)}đ
+                        </p>
+                      </li>
+                    ))
+                  : null}
+              </RankList>
+            ) : null}
+
+            {data.period === period && data.organization_rankings ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <RankingChart
+                  title={`Doanh số sản phẩm toàn tổ chức · ${rangeLabel(data)}`}
+                  empty="Chưa có doanh số sản phẩm trong khoảng này."
+                  rows={data.organization_rankings.products.map((row) => ({
+                    key: `${row.product_id ?? "custom"}-${row.product_code}-${row.product_name}-${row.unit}`,
+                    label: productName(row),
+                    detail: `${formatQuantity(row.quantity)}${row.unit.trim() ? ` ${row.unit}` : ""} · ${row.order_count} đơn`,
+                    revenue: row.revenue,
+                  }))}
+                />
+                <RankingChart
+                  title={`Doanh số khách hàng toàn tổ chức · ${rangeLabel(data)}`}
+                  empty="Chưa có doanh số khách hàng trong khoảng này."
+                  rows={data.organization_rankings.customers.map((row) => ({
+                    key: row.customer_id,
+                    label: customerName(row),
+                    detail: `${row.customer_code.trim() && row.customer_code.trim() !== customerName(row) ? `${row.customer_code.trim()} · ` : ""}${row.order_count} đơn`,
+                    revenue: row.revenue,
+                  }))}
+                />
+              </div>
+            ) : null}
 
             {data.period === period ? (
             <div className="grid gap-4 lg:grid-cols-2">

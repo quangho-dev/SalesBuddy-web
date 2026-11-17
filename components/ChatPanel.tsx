@@ -5,6 +5,7 @@ import { ChevronRight, Files, Globe, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
+import { useCurrentAccount } from "@/components/CurrentAccount";
 import {
   ChatThread,
   DocumentCitation,
@@ -38,15 +39,26 @@ function citationsFrom(value: unknown): DocumentCitation[] {
     const excerpt = String(row.excerpt || "").trim();
     const filename = String(row.filename || "").trim();
     if (!excerpt || !filename) return [];
-    return [{ filename, excerpt, page: row.page }];
+    const owner = String(row.owner || "").trim();
+    return [{ filename, excerpt, page: row.page, ...(owner ? { owner } : {}) }];
   });
 }
 
 function citationTitle(item: DocumentCitation) {
-  if (item.page != null && item.page !== "") {
-    return `${item.filename} · trang ${item.page}`;
-  }
-  return item.filename;
+  const owner = (item.owner || "").trim();
+  const title =
+    item.page != null && item.page !== ""
+      ? `${item.filename} · trang ${item.page}`
+      : item.filename;
+  return owner ? `${title} · ${owner}` : title;
+}
+
+function documentOwnerLabel(document: SalesDocument) {
+  if (document.is_owner !== false) return "";
+  const name = (document.owner_name || "").trim();
+  const email = (document.owner_email || "").trim();
+  if (name && email) return `${name} · ${email}`;
+  return name || email || "Nhân viên chưa có email";
 }
 
 function CitationList({ items }: { items: DocumentCitation[] }) {
@@ -132,6 +144,7 @@ function DocumentPicker({
   onToggleDocument: (documentId: string) => void;
   onClear: () => void;
 }) {
+  const { role } = useCurrentAccount();
   const readyCount = documents.filter((document) => document.status === "ready").length;
   const selected = documents.filter((document) => selectedIds.includes(document.id));
   const label =
@@ -178,7 +191,9 @@ function DocumentPicker({
         </ul>
       ) : (
         <p className="mt-1 text-xs text-black/45 dark:text-white/45">
-          Chưa chọn thì câu hỏi tìm trong mọi tài liệu đã sẵn sàng.
+          {role === "sales_supervisor"
+            ? "Chưa chọn thì câu hỏi tìm trong mọi tài liệu đã sẵn sàng của bạn và nhân viên sales."
+            : "Chưa chọn thì câu hỏi tìm trong mọi tài liệu đã sẵn sàng."}
         </p>
       )}
       {open ? (
@@ -195,6 +210,7 @@ function DocumentPicker({
             <ul className="mt-2 max-h-56 overflow-y-auto">
               {documents.map((document) => {
                 const ready = document.status === "ready";
+                const ownerLabel = documentOwnerLabel(document);
                 return (
                   <li key={document.id}>
                     <label
@@ -208,7 +224,14 @@ function DocumentPicker({
                         disabled={!ready || disabled}
                         onChange={() => onToggleDocument(document.id)}
                       />
-                      <span className="min-w-0 flex-1 truncate">{document.filename}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{document.filename}</span>
+                        {ownerLabel ? (
+                          <span className="block truncate text-xs text-black/50 dark:text-white/50">
+                            {ownerLabel}
+                          </span>
+                        ) : null}
+                      </span>
                       {ready ? null : (
                         <span className="shrink-0 text-xs">{documentStatusLabel(document.status)}</span>
                       )}

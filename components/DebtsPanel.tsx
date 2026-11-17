@@ -3,12 +3,14 @@
 import { customerLabel } from "@/components/CustomerPicker";
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
+  listCustomerOwners,
   listCustomers,
   listOrders,
   type Customer,
+  type CustomerOwner,
   type Order,
 } from "@/lib/api";
 
@@ -159,6 +161,14 @@ function isInFinalDueShare(order: Order, customers: Customer[]): boolean {
   return remaining <= windowDays;
 }
 
+function ownerFilterLabel(owner: CustomerOwner) {
+  const name = (owner.name || "").trim();
+  const email = (owner.email || "").trim();
+  const identity = name && email ? `${name} · ${email}` : name || email;
+  if (owner.is_self) return identity ? `${identity} (tôi)` : "Tôi";
+  return identity || "Nhân viên chưa có email";
+}
+
 function paymentMethodLabel(method?: string | null) {
   if (method === "cash") return "Tiền mặt";
   if (method === "bank_transfer") return "Chuyển khoản";
@@ -171,11 +181,16 @@ export function DebtsPanel() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [owners, setOwners] = useState<CustomerOwner[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const pendingOwnerRef = useRef<string | null>(null);
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS);
   const [dueFilter, setDueFilter] = useState<DueFilter>("all");
   const [loadingList, setLoadingList] = useState(true);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
+  const selfId = owners.find((owner) => owner.is_self)?.clerk_id ?? "";
+  const showOwnerFilter = owners.length > 1;
 
   const filtered = useMemo(() => {
     let rows = orders.filter((order) => !order.is_paid);
@@ -196,6 +211,7 @@ export function DebtsPanel() {
       const haystack = [
         customerLabel(customer),
         customer?.phone_number ?? "",
+        order.owner_email ?? "",
         order.notes,
         formatDate(order.order_date),
         order.order_date,
@@ -224,12 +240,14 @@ export function DebtsPanel() {
     setLoadingList(true);
     try {
       const token = await withToken();
-      const [orderRows, customerRows] = await Promise.all([
-        listOrders(token, { isPaid: false }),
-        listCustomers(token),
+      const [orderRows, customerRows, ownerRows] = await Promise.all([
+        listOrders(token, { isPaid: false, ownerClerkId: ownerFilter || undefined }),
+        listCustomers(token, ownerFilter || undefined),
+        listCustomerOwners(token),
       ]);
       setOrders(orderRows.filter((order) => !order.is_paid));
       setCustomers(customerRows);
+      setOwners(ownerRows);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Không tải được danh sách công nợ.",
@@ -237,11 +255,24 @@ export function DebtsPanel() {
     } finally {
       setLoadingList(false);
     }
-  }, [withToken]);
+  }, [ownerFilter, withToken]);
 
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  useEffect(() => {
+    pendingOwnerRef.current = new URLSearchParams(window.location.search).get("owner");
+  }, []);
+
+  useEffect(() => {
+    const owner = pendingOwnerRef.current;
+    if (!owner || owners.length === 0) return;
+    if (owners.some((item) => item.clerk_id === owner)) {
+      setOwnerFilter(owner);
+    }
+    pendingOwnerRef.current = null;
+  }, [owners]);
 
   useEffect(() => {
     if (!customerFilter) return;
@@ -298,6 +329,27 @@ export function DebtsPanel() {
           }`}
         >
           <div className="flex flex-col gap-3 border-b border-black/10 p-4 dark:border-white/10">
+            {showOwnerFilter ? (
+              <label className="flex flex-col gap-1 text-sm">
+                Nhân viên
+                <select
+                  value={ownerFilter}
+                  onChange={(event) => {
+                    setOwnerFilter(event.target.value);
+                    setCustomerFilter(ALL_CUSTOMERS);
+                    setSelectedId(null);
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">Tất cả nhân viên</option>
+                  {owners.map((owner) => (
+                    <option key={owner.clerk_id} value={owner.clerk_id}>
+                      {ownerFilterLabel(owner)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="flex flex-col gap-1 text-sm">
               Khách hàng
               <select
@@ -346,7 +398,9 @@ export function DebtsPanel() {
             ) : filtered.length === 0 ? (
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 {orders.length === 0
-                  ? "Không có đơn hàng chưa thanh toán."
+                  ? ownerFilter
+                    ? "Nhân viên này không còn công nợ."
+                    : "Không có đơn hàng chưa thanh toán."
                   : query.trim()
                     ? "Không tìm thấy công nợ phù hợp."
                     : dueFilter === "overdue"
@@ -379,6 +433,11 @@ export function DebtsPanel() {
                       }`}
                     >
                       <p className="truncate text-sm font-bold">{customerLabel(customer)}</p>
+                      {showOwnerFilter && order.owner_email ? (
+                        <p className={`mt-0.5 truncate text-xs ${active ? "opacity-80" : "text-black/55 dark:text-white/55"}`}>
+                          {order.clerk_id === selfId ? `${order.owner_email} (tôi)` : order.owner_email}
+                        </p>
+                      ) : null}
                       <p className="mt-0.5 truncate text-xs">
                         <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                           {formatDate(order.order_date)}
@@ -448,6 +507,13 @@ export function DebtsPanel() {
 
               <div className="rounded-lg border border-black/10 px-3 py-2 text-sm dark:border-white/15">
                 <p className="font-medium">{customerLabel(selectedCustomer)}</p>
+                {showOwnerFilter && selected.owner_email ? (
+                  <p className="mt-0.5 text-xs text-black/60 dark:text-white/60">
+                    {selected.clerk_id === selfId
+                      ? `${selected.owner_email} (tôi)`
+                      : selected.owner_email}
+                  </p>
+                ) : null}
                 {selectedCustomer?.phone_number?.trim() ? (
                   <p className="mt-0.5 text-xs text-black/60 dark:text-white/60">
                     {selectedCustomer.phone_number}

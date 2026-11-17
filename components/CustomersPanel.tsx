@@ -12,12 +12,14 @@ import {
   getCustomer,
   getSettings,
   importCustomerBatch,
+  listCustomerOwners,
   listCustomers,
   parseCustomerImport,
   updateCustomer,
   type Customer,
   type CustomerInput,
   type CustomerInteraction,
+  type CustomerOwner,
 } from "@/lib/api";
 
 type FormState = Omit<CustomerInput, "interaction_history" | "payment_term_days"> & {
@@ -43,6 +45,12 @@ const inputClass =
 
 function customerLabel(customer: Pick<Customer, "company_name" | "contact_person">) {
   return customer.company_name.trim() || customer.contact_person.trim() || "Khách hàng chưa đặt tên";
+}
+
+function ownerOptionLabel(owner: CustomerOwner) {
+  const email = owner.email.trim();
+  if (owner.is_self) return email ? `${email} (tôi)` : "Tôi";
+  return email || "Nhân viên chưa có email";
 }
 
 function interactionTimestamp(value?: string) {
@@ -252,6 +260,8 @@ export function CustomersPanel() {
   const [interactionDate, setInteractionDate] = useState(todayInputValue);
   const [interactionTime, setInteractionTime] = useState(nowTimeInputValue);
   const [query, setQuery] = useState("");
+  const [owners, setOwners] = useState<CustomerOwner[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(
@@ -264,8 +274,13 @@ export function CustomersPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const defaultTermRef = useRef("3");
+  const pendingOwnerRef = useRef<string | null>(null);
 
   const selected = customers.find((customer) => customer.id === selectedId) ?? null;
+  const selfId = owners.find((owner) => owner.is_self)?.clerk_id ?? "";
+  const readOnly = Boolean(selfId && selected && selected.clerk_id !== selfId);
+  const fieldLocked = saving || readOnly;
+  const showOwnerFilter = owners.length > 1;
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -313,18 +328,35 @@ export function CustomersPanel() {
     setError(null);
     try {
       const token = await withToken();
-      const rows = await listCustomers(token);
+      const [rows, ownerRows] = await Promise.all([
+        listCustomers(token, ownerFilter || undefined),
+        listCustomerOwners(token),
+      ]);
       setCustomers(rows);
+      setOwners(ownerRows);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được danh sách khách hàng.");
     } finally {
       setLoadingList(false);
     }
-  }, [withToken]);
+  }, [withToken, ownerFilter]);
 
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  useEffect(() => {
+    pendingOwnerRef.current = new URLSearchParams(window.location.search).get("owner");
+  }, []);
+
+  useEffect(() => {
+    const owner = pendingOwnerRef.current;
+    if (!owner || owners.length === 0) return;
+    if (owners.some((item) => item.clerk_id === owner)) {
+      setOwnerFilter(owner);
+    }
+    pendingOwnerRef.current = null;
+  }, [owners]);
 
   useEffect(() => {
     let cancelled = false;
@@ -388,6 +420,7 @@ export function CustomersPanel() {
 
   function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (readOnly) return;
     setConfirmSave(true);
   }
 
@@ -525,7 +558,7 @@ export function CustomersPanel() {
     setExporting(true);
     try {
       const token = await withToken();
-      await downloadCustomersExport(token);
+      await downloadCustomersExport(token, ownerFilter || undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không xuất được file Excel.");
     } finally {
@@ -562,7 +595,7 @@ export function CustomersPanel() {
           total: rows.length,
         });
       }
-      setCustomers(await listCustomers(await freshToken()));
+      setCustomers(await listCustomers(await freshToken(), ownerFilter || undefined));
       const notes = [
         updated ? `cập nhật ${updated} khách trùng mã số thuế hoặc mã khách hàng` : "",
         parsed.skipped ? `bỏ qua ${parsed.skipped} dòng trống` : "",
@@ -580,7 +613,7 @@ export function CustomersPanel() {
           : message,
       );
       try {
-        setCustomers(await listCustomers(await freshToken()));
+        setCustomers(await listCustomers(await freshToken(), ownerFilter || undefined));
       } catch {
         // Keep the list already on screen when the reload also fails.
       }
@@ -673,7 +706,29 @@ export function CustomersPanel() {
             showEditor ? "hidden md:flex" : "flex"
           }`}
         >
-          <div className="border-b border-black/10 p-4 dark:border-white/10">
+          <div className="flex flex-col gap-3 border-b border-black/10 p-4 dark:border-white/10">
+            {showOwnerFilter ? (
+              <label className="flex flex-col gap-1 text-sm">
+                Nhân viên
+                <select
+                  value={ownerFilter}
+                  onChange={(event) => {
+                    setOwnerFilter(event.target.value);
+                    setSelectedId(null);
+                    setCreating(false);
+                    setConfirmDelete(false);
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">Tất cả nhân viên</option>
+                  {owners.map((owner) => (
+                    <option key={owner.clerk_id} value={owner.clerk_id}>
+                      {ownerOptionLabel(owner)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label htmlFor="customer-search" className="sr-only">
               Tìm khách hàng
             </label>
@@ -693,7 +748,9 @@ export function CustomersPanel() {
             ) : filtered.length === 0 ? (
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 {customers.length === 0
-                  ? "Chưa có khách hàng. Bấm “Thêm khách hàng” để tạo mới."
+                  ? ownerFilter
+                    ? "Nhân viên này chưa có khách hàng."
+                    : "Chưa có khách hàng. Bấm “Thêm khách hàng” để tạo mới."
                   : "Không tìm thấy khách hàng phù hợp."}
               </li>
             ) : (
@@ -715,6 +772,17 @@ export function CustomersPanel() {
                         <p className="whitespace-normal break-words text-sm font-medium">
                           {customerLabel(customer)}
                         </p>
+                        {showOwnerFilter && customer.owner_email ? (
+                          <p
+                            className={`mt-0.5 whitespace-normal break-words text-xs ${
+                              active ? "opacity-80" : "text-black/55 dark:text-white/55"
+                            }`}
+                          >
+                            {customer.clerk_id === selfId
+                              ? `${customer.owner_email} (tôi)`
+                              : customer.owner_email}
+                          </p>
+                        ) : null}
                         <p
                           className={`mt-0.5 whitespace-normal break-words text-xs ${
                             active ? "opacity-80" : "text-black/55 dark:text-white/55"
@@ -807,7 +875,7 @@ export function CustomersPanel() {
                   </button>
                   <h2 className="text-base font-semibold tracking-tight">{title}</h2>
                 </div>
-                {!creating && selectedId ? (
+                {!creating && selectedId && !readOnly ? (
                   confirmDelete ? (
                     <div className="flex flex-col items-end gap-2">
                       <span className="max-w-xs text-right text-xs text-red-700 dark:text-red-300">
@@ -844,6 +912,12 @@ export function CustomersPanel() {
                 ) : null}
               </div>
 
+              {readOnly && selected ? (
+                <p className="rounded-lg border border-black/10 bg-black/[0.03] px-3 py-2 text-sm text-black/70 dark:border-white/15 dark:bg-white/[0.04] dark:text-white/70">
+                  Khách của {selected.owner_email || "nhân viên khác"}. Bạn chỉ xem được thông tin này.
+                </p>
+              ) : null}
+
               {error ? (
                 <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
                   {error}
@@ -856,7 +930,7 @@ export function CustomersPanel() {
                   newInteraction={newInteraction}
                   interactionDate={interactionDate}
                   interactionTime={interactionTime}
-                  saving={saving}
+                  saving={fieldLocked}
                   className="border-b border-black/10 pb-5 dark:border-white/10"
                   onNewInteractionChange={setNewInteraction}
                   onInteractionDateChange={setInteractionDate}
@@ -873,7 +947,7 @@ export function CustomersPanel() {
                     value={form.customer_code}
                     onChange={(event) => updateField("customer_code", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
@@ -882,7 +956,7 @@ export function CustomersPanel() {
                     value={form.company_name}
                     onChange={(event) => updateField("company_name", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
@@ -891,7 +965,7 @@ export function CustomersPanel() {
                     value={form.contact_person}
                     onChange={(event) => updateField("contact_person", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm sm:col-span-2">
@@ -900,7 +974,7 @@ export function CustomersPanel() {
                     value={form.address}
                     onChange={(event) => updateField("address", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
@@ -909,7 +983,7 @@ export function CustomersPanel() {
                     value={form.phone_number}
                     onChange={(event) => updateField("phone_number", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
@@ -918,7 +992,7 @@ export function CustomersPanel() {
                     value={form.tax_code}
                     onChange={(event) => updateField("tax_code", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
@@ -930,7 +1004,7 @@ export function CustomersPanel() {
                     value={form.payment_term_days}
                     onChange={(event) => updateField("payment_term_days", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <p className="sm:col-span-2 text-xs text-black/55 dark:text-white/55">
@@ -942,7 +1016,7 @@ export function CustomersPanel() {
                     value={form.zalo}
                     onChange={(event) => updateField("zalo", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
@@ -951,7 +1025,7 @@ export function CustomersPanel() {
                     value={form.website}
                     onChange={(event) => updateField("website", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm">
@@ -960,7 +1034,7 @@ export function CustomersPanel() {
                     value={form.facebook}
                     onChange={(event) => updateField("facebook", event.target.value)}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-sm sm:col-span-2">
@@ -970,20 +1044,22 @@ export function CustomersPanel() {
                     onChange={(event) => updateField("notes", event.target.value)}
                     rows={3}
                     className={inputClass}
-                    disabled={saving}
+                    disabled={fieldLocked}
                   />
                 </label>
               </div>
 
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
-                >
-                  {saving ? "Đang lưu..." : creating ? "Tạo khách hàng" : "Lưu thay đổi"}
-                </button>
-              </div>
+              {readOnly ? null : (
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 dark:bg-primary dark:text-white"
+                  >
+                    {saving ? "Đang lưu..." : creating ? "Tạo khách hàng" : "Lưu thay đổi"}
+                  </button>
+                </div>
+              )}
 
               {creating ? (
                 <InteractionHistorySection
@@ -991,7 +1067,7 @@ export function CustomersPanel() {
                   newInteraction={newInteraction}
                   interactionDate={interactionDate}
                   interactionTime={interactionTime}
-                  saving={saving}
+                  saving={fieldLocked}
                   className="border-t border-black/10 pt-5 dark:border-white/10"
                   onNewInteractionChange={setNewInteraction}
                   onInteractionDateChange={setInteractionDate}

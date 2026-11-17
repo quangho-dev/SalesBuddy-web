@@ -1,5 +1,6 @@
 "use client";
 
+import { useCurrentAccount } from "@/components/CurrentAccount";
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
@@ -50,6 +51,14 @@ function formatWhen(value: string) {
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function documentOwnerLabel(document: SalesDocument) {
+  if (document.is_owner !== false) return "";
+  const name = (document.owner_name || "").trim();
+  const email = (document.owner_email || "").trim();
+  if (name && email) return `${name} · ${email}`;
+  return name || email || "Nhân viên chưa có email";
+}
+
 function isBusy(document: SalesDocument) {
   return document.status === "pending" || document.status === "processing";
 }
@@ -74,6 +83,7 @@ function statusClass(status: string) {
 
 export function DocumentsPanel() {
   const { getToken } = useAuth();
+  const { role } = useCurrentAccount();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [documents, setDocuments] = useState<SalesDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,7 +215,9 @@ export function DocumentsPanel() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Tài liệu</h1>
           <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-            Tải PDF, Word, PowerPoint, TXT hoặc Markdown. File được embed để Trợ Lý Sales đọc.
+            {role === "sales_supervisor"
+              ? "Tải PDF, Word, PowerPoint, TXT hoặc Markdown. Bạn xem và truy vấn được tài liệu của nhân viên sales trong cùng tổ chức."
+              : "Tải PDF, Word, PowerPoint, TXT hoặc Markdown. File được embed để Trợ Lý Sales đọc."}
           </p>
         </div>
         <div className="shrink-0">
@@ -242,6 +254,8 @@ export function DocumentsPanel() {
           <ul className="flex flex-col gap-3">
             {documents.map((document) => {
               const working = isBusy(document) || busyId === document.id;
+              const ownerLabel = documentOwnerLabel(document);
+              const owned = document.is_owner !== false;
               return (
                 <li
                   key={document.id}
@@ -254,6 +268,11 @@ export function DocumentsPanel() {
                         {formatSize(document.byte_size)}
                         {document.created_at ? ` · ${formatWhen(document.created_at)}` : ""}
                       </p>
+                      {ownerLabel ? (
+                        <p className="mt-1 whitespace-normal break-words text-xs text-black/55 dark:text-white/55">
+                          {ownerLabel}
+                        </p>
+                      ) : null}
                     </div>
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClass(document.status)}`}
@@ -264,6 +283,7 @@ export function DocumentsPanel() {
                   {document.error ? (
                     <p className="mt-2 text-sm text-red-700 dark:text-red-300">{document.error}</p>
                   ) : null}
+                  {owned ? (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -305,6 +325,7 @@ export function DocumentsPanel() {
                       </button>
                     )}
                   </div>
+                  ) : null}
                 </li>
               );
             })}

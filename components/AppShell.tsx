@@ -2,6 +2,9 @@
 
 import { Show, SignInButton, SignUpButton } from "@clerk/nextjs";
 import { AppSidebar } from "@/components/AppSidebar";
+import { CurrentAccountProvider } from "@/components/CurrentAccount";
+import { OrganizationGate } from "@/components/OrganizationGate";
+import { UserGreeting } from "@/components/UserGreeting";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -24,6 +27,7 @@ function SignedInShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <CurrentAccountProvider>
     <div className="flex h-full min-h-0 flex-1">
       <div className="hidden h-full md:block">
         <AppSidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
@@ -44,7 +48,7 @@ function SignedInShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-3 border-b border-black/10 px-4 py-3 md:hidden dark:border-white/10">
+        <div className="flex items-start gap-3 border-b border-black/10 px-4 py-3 md:hidden dark:border-white/10">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
@@ -52,11 +56,12 @@ function SignedInShell({ children }: { children: React.ReactNode }) {
           >
             Menu
           </button>
-          <span className="text-sm font-semibold tracking-tight">Trợ Lý Sales</span>
+          <UserGreeting />
         </div>
-        {children}
+        <OrganizationGate>{children}</OrganizationGate>
       </div>
     </div>
+    </CurrentAccountProvider>
   );
 }
 

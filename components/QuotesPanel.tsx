@@ -13,12 +13,14 @@ import {
   deleteQuote,
   generateQuoteFile,
   getQuote,
+  listCustomerOwners,
   listCustomers,
   listProducts,
   listQuotes,
   setQuoteStatus,
   updateQuote,
   type Customer,
+  type CustomerOwner,
   type GeneratedQuoteFile,
   type Product,
   type Quote,
@@ -211,6 +213,14 @@ function QuoteStatusHistory({ events }: { events?: Quote["status_events"] }) {
       )}
     </div>
   );
+}
+
+function ownerFilterLabel(owner: CustomerOwner) {
+  const name = (owner.name || "").trim();
+  const email = (owner.email || "").trim();
+  const identity = name && email ? `${name} · ${email}` : name || email;
+  if (owner.is_self) return identity ? `${identity} (tôi)` : "Tôi";
+  return identity || "Nhân viên chưa có email";
 }
 
 function quoteLabel(quote: Quote) {
@@ -461,6 +471,9 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [query, setQuery] = useState("");
+  const [owners, setOwners] = useState<CustomerOwner[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const pendingOwnerRef = useRef<string | null>(null);
   const [customerFilter, setCustomerFilter] = useState(ALL_CUSTOMERS);
   const [statusFilter, setStatusFilter] = useState<"" | QuoteStatus>("");
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -479,6 +492,12 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
   const [error, setError] = useState<string | null>(null);
 
   const selected = quotes.find((quote) => quote.id === selectedId) ?? null;
+  const selfId = owners.find((owner) => owner.is_self)?.clerk_id ?? "";
+  const readOnly = Boolean(selfId && selected && selected.clerk_id !== selfId);
+  const showOwnerFilter = owners.length > 1;
+  const pickerCustomers = selfId
+    ? customers.filter((customer) => !creating || customer.clerk_id === selfId)
+    : customers;
 
   const filtered = useMemo(() => {
     let rows = quotes;
@@ -545,24 +564,39 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
     setError(null);
     try {
       const token = await withToken();
-      const [quoteRows, customerRows, productRows] = await Promise.all([
-        listQuotes(token),
+      const [quoteRows, customerRows, productRows, ownerRows] = await Promise.all([
+        listQuotes(token, undefined, ownerFilter || undefined),
         listCustomers(token),
         listProducts(token),
+        listCustomerOwners(token),
       ]);
       setQuotes(quoteRows);
       setCustomers(customerRows);
       setProducts(productRows);
+      setOwners(ownerRows);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không tải được danh sách báo giá.");
     } finally {
       setLoadingList(false);
     }
-  }, [withToken]);
+  }, [ownerFilter, withToken]);
 
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  useEffect(() => {
+    pendingOwnerRef.current = new URLSearchParams(window.location.search).get("owner");
+  }, []);
+
+  useEffect(() => {
+    const owner = pendingOwnerRef.current;
+    if (!owner || owners.length === 0) return;
+    if (owners.some((item) => item.clerk_id === owner)) {
+      setOwnerFilter(owner);
+    }
+    pendingOwnerRef.current = null;
+  }, [owners]);
 
   useEffect(() => {
     if (!customerFilter) return;
@@ -681,6 +715,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
 
   async function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (readOnly) return;
     const payload = toPayload(form);
     if (!payload.customer_id) {
       setError("Hãy chọn khách hàng.");
@@ -864,6 +899,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
   }
 
   async function onChooseStatus(status: QuoteStatus) {
+    if (readOnly) return;
     if (status === "converted") {
       setFailureOpen(false);
       await onConvertToOrder();
@@ -999,6 +1035,28 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
           }`}
         >
           <div className="flex flex-col gap-3 border-b border-black/10 p-4 dark:border-white/10">
+            {showOwnerFilter ? (
+              <label className="flex flex-col gap-1 text-sm">
+                Nhân viên
+                <select
+                  value={ownerFilter}
+                  onChange={(event) => {
+                    setOwnerFilter(event.target.value);
+                    setSelectedId(null);
+                    setCreating(false);
+                    setConfirmDelete(false);
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">Tất cả nhân viên</option>
+                  {owners.map((owner) => (
+                    <option key={owner.clerk_id} value={owner.clerk_id}>
+                      {ownerFilterLabel(owner)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="flex flex-col gap-1 text-sm">
               Khách hàng
               <select
@@ -1046,7 +1104,9 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
             ) : filtered.length === 0 ? (
               <li className="px-3 py-6 text-center text-sm text-black/50 dark:text-white/50">
                 {quotes.length === 0
-                  ? "Chưa có báo giá. Bấm “Thêm báo giá” để tạo mới."
+                  ? ownerFilter
+                    ? "Nhân viên này chưa có báo giá."
+                    : "Chưa có báo giá. Bấm “Thêm báo giá” để tạo mới."
                   : statusFilter
                     ? "Không có báo giá ở trạng thái này."
                     : customerFilter
@@ -1075,6 +1135,11 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                         <p className="truncate text-sm font-bold">
                           {customerLabel(quoteCustomer(quote, customers))}
                         </p>
+                        {showOwnerFilter && quote.owner_email ? (
+                          <p className={`mt-0.5 truncate text-xs ${active ? "opacity-80" : "text-black/55 dark:text-white/55"}`}>
+                            {quote.clerk_id === selfId ? `${quote.owner_email} (tôi)` : quote.owner_email}
+                          </p>
+                        ) : null}
                         <p className="mt-0.5 truncate text-xs">
                           <span className={active ? "opacity-80" : "text-black/55 dark:text-white/55"}>
                             {formatWhen(quote.created_at)}
@@ -1174,7 +1239,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                       Xem file Drive
                     </a>
                   ) : null}
-                  {!creating && selectedId ? (
+                  {!creating && selectedId && !readOnly ? (
                     confirmDelete ? (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-red-700 dark:text-red-300">Xóa báo giá này?</span>
@@ -1208,13 +1273,19 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                 </div>
               </div>
 
+              {readOnly && selected ? (
+                <p className="rounded-lg border border-black/10 bg-black/[0.03] px-3 py-2 text-sm text-black/70 dark:border-white/15 dark:bg-white/[0.04] dark:text-white/70">
+                  Báo giá của {selected.owner_email || "nhân viên khác"}. Bạn chỉ xem được thông tin này.
+                </p>
+              ) : null}
+
               <div className="flex flex-col gap-3 rounded-xl border border-black/10 p-4 dark:border-white/10">
                 <p className="text-sm font-medium">Trạng thái báo giá</p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => void onChooseStatus("converted")}
-                    disabled={busy}
+                    disabled={busy || readOnly}
                     aria-pressed={currentStatus === "converted"}
                     className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-4 text-sm font-medium disabled:opacity-50 ${
                       currentStatus === "converted"
@@ -1228,7 +1299,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                   <button
                     type="button"
                     onClick={() => void onChooseStatus("failed")}
-                    disabled={busy}
+                    disabled={busy || readOnly}
                     aria-pressed={currentStatus === "failed" || failureOpen}
                     className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-4 text-sm font-medium disabled:opacity-50 ${
                       currentStatus === "failed" || failureOpen
@@ -1242,7 +1313,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                   <button
                     type="button"
                     onClick={() => void onChooseStatus("unset")}
-                    disabled={busy}
+                    disabled={busy || readOnly}
                     aria-pressed={currentStatus === "unset"}
                     className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-4 text-sm font-medium disabled:opacity-50 ${
                       currentStatus === "unset"
@@ -1293,10 +1364,14 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                 ) : null}
               </div>
 
+              <fieldset
+                disabled={readOnly}
+                className="m-0 flex min-w-0 flex-col gap-5 border-0 p-0 disabled:opacity-80"
+              >
               <CustomerPicker
-                customers={customers}
+                customers={pickerCustomers}
                 selectedId={form.customer_id}
-                disabled={busy}
+                disabled={busy || readOnly}
                 allowCreate
                 inputId="quote-customer-search"
                 resultsId="quote-customer-results"
@@ -1585,7 +1660,9 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                   </p>
                 </div>
               </div>
+              </fieldset>
 
+              {readOnly ? null : (
               <div className="flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
@@ -1605,6 +1682,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                   {saving ? "Đang lưu..." : creating ? "Tạo báo giá" : "Lưu thay đổi"}
                 </button>
               </div>
+              )}
             </form>
           )}
         </section>
