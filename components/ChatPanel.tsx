@@ -899,7 +899,7 @@ export function ChatPanel() {
                   key={message.id}
                   className={
                     message.role === "user"
-                      ? "ml-auto max-w-[85%] rounded-2xl bg-primary px-4 py-3 text-sm text-white dark:bg-primary dark:text-white"
+                      ? "chat-user-bubble ml-auto max-w-[85%] rounded-2xl bg-primary px-4 py-3 text-sm text-white dark:bg-primary dark:text-white"
                       : "mr-auto max-w-[85%] rounded-2xl border border-black/10 px-4 py-3 text-sm dark:border-white/15"
                   }
                 >

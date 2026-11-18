@@ -36,6 +36,12 @@ body {
   color: #ffffff;
 }
 
+.chat-user-bubble::selection,
+.chat-user-bubble *::selection {
+  background: #ffffff;
+  color: var(--navy);
+}
+
 @layer base {
   button,
   a[href],
