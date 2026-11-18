@@ -416,7 +416,11 @@ export function DashboardPanel() {
             {data.period === period ? (
             <div className="grid gap-4 lg:grid-cols-2">
               <RankList
-                title="Top 5 khách hàng theo doanh số"
+                title={
+                  data.organization_rankings
+                    ? "Top 5 khách hàng theo doanh số của bạn"
+                    : "Top 5 khách hàng theo doanh số"
+                }
                 empty="Chưa có doanh số khách hàng trong khoảng này."
               >
                 {data.top_customers.length
@@ -447,7 +451,11 @@ export function DashboardPanel() {
               </RankList>
 
               <RankList
-                title="Top 5 sản phẩm theo doanh số"
+                title={
+                  data.organization_rankings
+                    ? "Top 5 sản phẩm theo doanh số của bạn"
+                    : "Top 5 sản phẩm theo doanh số"
+                }
                 empty="Chưa có doanh số sản phẩm trong khoảng này."
               >
                 {data.top_products.length
