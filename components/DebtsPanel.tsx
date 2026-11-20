@@ -175,6 +175,10 @@ function paymentMethodLabel(method?: string | null) {
   return "";
 }
 
+function isDebtOrder(order: Order) {
+  return !order.is_paid && order.status !== "cancelled" && order.status !== "paused";
+}
+
 export function DebtsPanel() {
   const { getToken } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -193,7 +197,7 @@ export function DebtsPanel() {
   const showOwnerFilter = owners.length > 1;
 
   const filtered = useMemo(() => {
-    let rows = orders.filter((order) => !order.is_paid);
+    let rows = orders.filter(isDebtOrder);
     if (customerFilter) {
       rows = rows.filter((order) => order.customer_id === customerFilter);
     }
@@ -245,7 +249,7 @@ export function DebtsPanel() {
         listCustomers(token, ownerFilter || undefined),
         listCustomerOwners(token),
       ]);
-      setOrders(orderRows.filter((order) => !order.is_paid));
+      setOrders(orderRows.filter(isDebtOrder));
       setCustomers(customerRows);
       setOwners(ownerRows);
     } catch (err) {
@@ -314,7 +318,7 @@ export function DebtsPanel() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Công nợ</h1>
           <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-            Các đơn hàng chưa thanh toán. Tổng công nợ:{" "}
+            Các đơn hàng chính thức chưa thanh toán. Tổng công nợ:{" "}
             <span className="font-semibold text-black dark:text-white">
               {formatPrice(outstandingTotal)}đ
             </span>
