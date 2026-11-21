@@ -226,6 +226,7 @@ export type Quote = {
   id: string;
   clerk_id: string;
   customer_id: string;
+  quote_code?: string;
   notes: string;
   subtotal: number | string;
   vat_total: number | string;

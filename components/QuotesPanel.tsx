@@ -514,6 +514,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
       const haystack = [
         customerLabel(customer),
         customer?.phone_number ?? "",
+        quote.quote_code,
         quote.notes,
         formatWhen(quote.created_at),
         ...(quote.items ?? []).flatMap((item) => [
@@ -1092,7 +1093,7 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
               id="quote-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm khách, ghi chú, sản phẩm, mã hàng..."
+              placeholder="Tìm mã báo giá, khách, ghi chú, sản phẩm, mã hàng..."
               className={inputClass}
             />
           </div>
@@ -1135,6 +1136,19 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                         <p className="truncate text-sm font-bold">
                           {customerLabel(quoteCustomer(quote, customers))}
                         </p>
+                        {quote.quote_code?.trim() ? (
+                          <p className="mt-1">
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-xs font-bold ${
+                                active
+                                  ? "bg-white/20 text-white"
+                                  : "bg-primary/10 text-primary"
+                              }`}
+                            >
+                              {quote.quote_code.trim()}
+                            </span>
+                          </p>
+                        ) : null}
                         {showOwnerFilter && quote.owner_email ? (
                           <p className={`mt-0.5 truncate text-xs ${active ? "opacity-80" : "text-black/55 dark:text-white/55"}`}>
                             {quote.clerk_id === selfId ? `${quote.owner_email} (tôi)` : quote.owner_email}
@@ -1219,6 +1233,11 @@ export function QuotesPanel({ initialQuoteId }: { initialQuoteId?: string } = {}
                   </button>
                   <div className="min-w-0">
                     <h2 className="truncate text-base font-semibold tracking-tight">{title}</h2>
+                    {!creating && selected?.quote_code?.trim() ? (
+                      <p className="mt-1 text-sm font-bold text-primary">
+                        Mã báo giá {selected.quote_code.trim()}
+                      </p>
+                    ) : null}
                     {!creating && selected ? (
                       <QuoteStatusLine
                         status={selected.status}
